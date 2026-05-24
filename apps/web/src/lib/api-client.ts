@@ -91,6 +91,42 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   workTypes: {
     list: () => request<{ workTypes: WorkType[] }>('/work-types'),
+
+    create: (data: {
+      name: string
+      color: string
+      billingType: BillingType
+      isBillable: boolean
+      sortOrder: number
+    }) =>
+      request<{ workType: WorkType }>('/work-types', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    update: (
+      id: string,
+      data: Partial<{
+        name: string
+        color: string
+        billingType: BillingType
+        isBillable: boolean
+        sortOrder: number
+      }>,
+    ) =>
+      request<{ workType: WorkType }>(`/work-types/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
+    deactivate: (id: string) =>
+      request<{ success: boolean }>(`/work-types/${id}`, { method: 'DELETE' }),
+
+    reorder: (orders: { id: string; sortOrder: number }[]) =>
+      request<{ success: boolean }>('/work-types/reorder', {
+        method: 'PATCH',
+        body: JSON.stringify({ orders }),
+      }),
   },
 
   timeRecords: {
