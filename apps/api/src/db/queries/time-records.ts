@@ -21,6 +21,27 @@ function mapRecord(row: TimeRecordRow): MappedTimeRecord {
   }
 }
 
+export async function listRecords(
+  userId: string,
+  tenantId: string,
+  from: Date,
+  to: Date,
+): Promise<MappedTimeRecord[]> {
+  const rows = await db
+    .select()
+    .from(timeRecords)
+    .where(
+      and(
+        eq(timeRecords.userId, userId),
+        eq(timeRecords.tenantId, tenantId),
+        gte(timeRecords.clockedAt, from),
+        lte(timeRecords.clockedAt, to),
+      ),
+    )
+    .orderBy(asc(timeRecords.clockedAt))
+  return rows.map(mapRecord)
+}
+
 export async function listTodayRecords(
   userId: string,
   tenantId: string,

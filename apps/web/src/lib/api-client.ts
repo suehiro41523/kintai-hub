@@ -49,6 +49,11 @@ export interface TodayResponse {
   activeSession: ActiveSession | null
 }
 
+export interface HistoryResponse {
+  records: TimeRecord[]
+  total: number
+}
+
 // ─── エラークラス ──────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
@@ -123,5 +128,8 @@ export const api = {
           body: JSON.stringify({ fromWorkTypeId, toWorkTypeId }),
         },
       ),
+
+    list: (from: string, to: string) =>
+      request<HistoryResponse>(`/time-records?from=${from}&to=${to}`),
   },
 }

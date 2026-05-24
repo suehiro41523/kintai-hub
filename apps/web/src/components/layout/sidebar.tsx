@@ -6,7 +6,7 @@ import {
   Clock,
   DollarSign,
   FileText,
-  LayoutDashboard,
+  History,
   Settings,
   Users,
 } from 'lucide-react'
@@ -15,7 +15,7 @@ import { usePathname } from 'next/navigation'
 
 const NAV_ITEMS = [
   { href: '/clock', icon: Clock, label: '打刻' },
-  { href: '/', icon: LayoutDashboard, label: 'ダッシュボード' },
+  { href: '/history', icon: History, label: '勤怠履歴' },
   { href: '/shifts', icon: Calendar, label: 'シフト' },
   { href: '/requests', icon: FileText, label: '申請' },
   { href: '/reports', icon: BarChart2, label: 'レポート' },
