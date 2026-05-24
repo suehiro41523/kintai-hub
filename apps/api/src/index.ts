@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from './lib/logger.js'
 import { requestLogger } from './middleware/request-logger.js'
+import { billingRouter } from './routes/billing/index.js'
 import { timeRecordsRouter } from './routes/time-records/index.js'
 import { workTypesRouter } from './routes/work-types/index.js'
 import type { AppEnv } from './types.js'
@@ -22,6 +23,7 @@ app.use('*', requestLogger)
 
 app.route('/work-types', workTypesRouter)
 app.route('/time-records', timeRecordsRouter)
+app.route('/billing', billingRouter)
 
 app.get('/health', (c) => c.json({ ok: true }))
 

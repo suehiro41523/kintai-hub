@@ -54,6 +54,39 @@ export interface HistoryResponse {
   total: number
 }
 
+export interface BillingContract {
+  id: string
+  tenantId: string
+  workTypeId: string
+  clientName: string
+  billingType: BillingType
+  minHours: number | null
+  maxHours: number | null
+  baseAmount: number | null
+  overRate: number | null
+  underRate: number | null
+  contractStart: string
+  contractEnd: string | null
+  createdAt: string
+}
+
+export type BillingSummaryStatus = 'draft' | 'confirmed'
+
+export interface BillingSummary {
+  id: string
+  contractId: string
+  year: number
+  month: number
+  actualHours: number
+  billingHours: number
+  overHours: number | null
+  underHours: number | null
+  billingAmount: number
+  status: BillingSummaryStatus
+  confirmedAt: string | null
+  createdAt: string
+}
+
 // ─── エラークラス ──────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
@@ -167,5 +200,63 @@ export const api = {
 
     list: (from: string, to: string) =>
       request<HistoryResponse>(`/time-records?from=${from}&to=${to}`),
+  },
+
+  billing: {
+    listContracts: () => request<{ contracts: BillingContract[] }>('/billing/contracts'),
+
+    createContract: (data: {
+      workTypeId: string
+      clientName: string
+      billingType: BillingType
+      minHours?: number | null
+      maxHours?: number | null
+      baseAmount?: number | null
+      overRate?: number | null
+      underRate?: number | null
+      contractStart: string
+      contractEnd?: string | null
+    }) =>
+      request<{ contract: BillingContract }>('/billing/contracts', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    updateContract: (
+      id: string,
+      data: Partial<{
+        workTypeId: string
+        clientName: string
+        billingType: BillingType
+        minHours: number | null
+        maxHours: number | null
+        baseAmount: number | null
+        overRate: number | null
+        underRate: number | null
+        contractStart: string
+        contractEnd: string | null
+      }>,
+    ) =>
+      request<{ contract: BillingContract }>(`/billing/contracts/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
+    deleteContract: (id: string) =>
+      request<{ success: boolean }>(`/billing/contracts/${id}`, { method: 'DELETE' }),
+
+    listSummaries: (year: number, month: number) =>
+      request<{ summaries: BillingSummary[] }>(`/billing/summaries?year=${year}&month=${month}`),
+
+    calculate: (contractId: string, year: number, month: number) =>
+      request<{ summary: BillingSummary }>('/billing/summaries/calculate', {
+        method: 'POST',
+        body: JSON.stringify({ contractId, year, month }),
+      }),
+
+    confirm: (summaryId: string) =>
+      request<{ summary: BillingSummary }>(`/billing/summaries/${summaryId}/confirm`, {
+        method: 'POST',
+      }),
   },
 }
