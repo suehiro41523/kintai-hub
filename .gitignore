@@ -1,0 +1,22 @@
+node_modules
+**/*/node_modules
+
+.env*
+*.log
+
+# Next.js build output
+.next/
+out/
+
+# Drizzle / TS build
+dist/
+build/
+*.tsbuildinfo
+
+# Yarn Berry
+.yarn/install-state.gz
+.yarn/cache
+
+# OS
+.DS_Store
+Thumbs.db
