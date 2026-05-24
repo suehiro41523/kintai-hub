@@ -657,6 +657,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@holiday-jp/holiday_jp@npm:^2.5.1":
+  version: 2.5.1
+  resolution: "@holiday-jp/holiday_jp@npm:2.5.1"
+  checksum: 10c0/ef6f64041ae12eaaf4e78eb3cdc63e9d47b2561231907840de0cf90b84037043c8349f0debc19ba584b9b7959443ef26d9b587474f55c9f9af8a0a2a5ad741c3
+  languageName: node
+  linkType: hard
+
 "@hono/node-server@npm:^1.13.0":
   version: 1.19.14
   resolution: "@hono/node-server@npm:1.19.14"
@@ -970,6 +977,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@kintai/web@workspace:apps/web"
   dependencies:
+    "@holiday-jp/holiday_jp": "npm:^2.5.1"
     "@tanstack/react-query": "npm:^5.62.0"
     "@types/node": "npm:^22"
     "@types/react": "npm:^19"

@@ -137,6 +137,30 @@ export interface MonthlyReport {
   billingBreakdown: BillingBreakdown[]
 }
 
+export interface ShiftPattern {
+  id: string
+  tenantId: string
+  name: string
+  startTime: string
+  endTime: string
+  breakMinutes: number
+  isActive: boolean
+}
+
+export interface Shift {
+  id: string
+  userId: string
+  tenantId: string
+  workTypeId: string | null
+  shiftPatternId: string | null
+  shiftDate: string
+  startTime: string
+  endTime: string
+  status: string
+  createdBy: string
+  createdAt: string
+}
+
 export interface Request {
   id: string
   userId: string
@@ -397,5 +421,57 @@ export const api = {
       }),
 
     cancel: (id: string) => request<{ success: boolean }>(`/requests/${id}`, { method: 'DELETE' }),
+  },
+
+  shiftPatterns: {
+    list: () => request<{ patterns: ShiftPattern[] }>('/shift-patterns'),
+
+    create: (data: { name: string; startTime: string; endTime: string; breakMinutes: number }) =>
+      request<{ pattern: ShiftPattern }>('/shift-patterns', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    update: (
+      id: string,
+      data: Partial<{
+        name: string
+        startTime: string
+        endTime: string
+        breakMinutes: number
+        isActive: boolean
+      }>,
+    ) =>
+      request<{ pattern: ShiftPattern }>(`/shift-patterns/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+  },
+
+  shifts: {
+    listMy: (from: string, to: string) =>
+      request<{ shifts: Shift[] }>(`/shifts?from=${from}&to=${to}`),
+
+    listTeam: (from: string, to: string, userId?: string) =>
+      request<{ shifts: Shift[] }>(
+        `/shifts/team?from=${from}&to=${to}${userId ? `&userId=${userId}` : ''}`,
+      ),
+
+    bulkUpsert: (
+      items: {
+        userId: string
+        shiftDate: string
+        startTime: string
+        endTime: string
+        workTypeId?: string | null
+        shiftPatternId?: string | null
+      }[],
+    ) =>
+      request<{ created: Shift[]; updated: Shift[]; errors: { index: number; message: string }[] }>(
+        '/shifts/bulk',
+        { method: 'POST', body: JSON.stringify({ shifts: items }) },
+      ),
+
+    delete: (id: string) => request<{ success: boolean }>(`/shifts/${id}`, { method: 'DELETE' }),
   },
 }

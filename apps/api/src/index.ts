@@ -6,6 +6,8 @@ import { requestLogger } from './middleware/request-logger.js'
 import { billingRouter } from './routes/billing/index.js'
 import { reportsRouter } from './routes/reports/index.js'
 import { requestsRouter } from './routes/requests/index.js'
+import { shiftPatternsRouter } from './routes/shift-patterns/index.js'
+import { shiftsRouter } from './routes/shifts/index.js'
 import { timeRecordsRouter } from './routes/time-records/index.js'
 import { usersRouter } from './routes/users/index.js'
 import { workTypesRouter } from './routes/work-types/index.js'
@@ -30,6 +32,8 @@ app.route('/billing', billingRouter)
 app.route('/reports', reportsRouter)
 app.route('/users', usersRouter)
 app.route('/requests', requestsRouter)
+app.route('/shift-patterns', shiftPatternsRouter)
+app.route('/shifts', shiftsRouter)
 
 app.get('/health', (c) => c.json({ ok: true }))
 
