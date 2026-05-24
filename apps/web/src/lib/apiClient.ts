@@ -2,6 +2,8 @@
 // TODO: packages/types に移動する
 
 export type RecordType = 'clock_in' | 'clock_out' | 'break_start' | 'break_end'
+export type RequestType = 'leave' | 'overtime' | 'correction'
+export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
 export type BillingType = 'fixed' | 'hourly' | 'range' | 'project'
 export type UserRole = 'admin' | 'manager' | 'employee'
 export type EmploymentType = 'full_time' | 'part_time' | 'contract'
@@ -133,6 +135,22 @@ export interface MonthlyReport {
   nonBillableHours: number
   workTypeBreakdown: WorkTypeHours[]
   billingBreakdown: BillingBreakdown[]
+}
+
+export interface Request {
+  id: string
+  userId: string
+  tenantId: string
+  requestType: RequestType
+  startDate: string | null
+  endDate: string | null
+  startTime: string | null
+  endTime: string | null
+  targetRecordId: string | null
+  reason: string | null
+  status: RequestStatus
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── エラークラス ──────────────────────────────────────────────────────────────
@@ -346,5 +364,38 @@ export const api = {
       }),
 
     deactivate: (id: string) => request<{ success: boolean }>(`/users/${id}`, { method: 'DELETE' }),
+  },
+
+  requests: {
+    listMy: () => request<{ requests: Request[] }>('/requests/my'),
+
+    listPending: () => request<{ requests: Request[] }>('/requests/pending'),
+
+    create: (data: {
+      requestType: RequestType
+      startDate?: string | null
+      endDate?: string | null
+      startTime?: string | null
+      endTime?: string | null
+      reason?: string | null
+    }) =>
+      request<{ request: Request }>('/requests', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    approve: (id: string, comment?: string | null) =>
+      request<{ request: Request }>(`/requests/${id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ comment: comment ?? null }),
+      }),
+
+    reject: (id: string, comment?: string | null) =>
+      request<{ request: Request }>(`/requests/${id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ comment: comment ?? null }),
+      }),
+
+    cancel: (id: string) => request<{ success: boolean }>(`/requests/${id}`, { method: 'DELETE' }),
   },
 }

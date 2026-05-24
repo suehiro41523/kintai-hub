@@ -5,6 +5,7 @@ import { logger } from './lib/logger.js'
 import { requestLogger } from './middleware/request-logger.js'
 import { billingRouter } from './routes/billing/index.js'
 import { reportsRouter } from './routes/reports/index.js'
+import { requestsRouter } from './routes/requests/index.js'
 import { timeRecordsRouter } from './routes/time-records/index.js'
 import { usersRouter } from './routes/users/index.js'
 import { workTypesRouter } from './routes/work-types/index.js'
@@ -28,6 +29,7 @@ app.route('/time-records', timeRecordsRouter)
 app.route('/billing', billingRouter)
 app.route('/reports', reportsRouter)
 app.route('/users', usersRouter)
+app.route('/requests', requestsRouter)
 
 app.get('/health', (c) => c.json({ ok: true }))
 
