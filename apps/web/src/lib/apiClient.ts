@@ -3,6 +3,23 @@
 
 export type RecordType = 'clock_in' | 'clock_out' | 'break_start' | 'break_end'
 export type BillingType = 'fixed' | 'hourly' | 'range' | 'project'
+export type UserRole = 'admin' | 'manager' | 'employee'
+export type EmploymentType = 'full_time' | 'part_time' | 'contract'
+
+export interface User {
+  id: string
+  tenantId: string
+  departmentId: string | null
+  name: string
+  email: string
+  role: UserRole
+  employmentType: EmploymentType
+  hourlyRate: number | null
+  monthlySalary: number | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
 
 export interface WorkType {
   id: string
@@ -294,5 +311,40 @@ export const api = {
   reports: {
     monthly: (year: number, month: number) =>
       request<{ report: MonthlyReport }>(`/reports/monthly?year=${year}&month=${month}`),
+  },
+
+  users: {
+    list: () => request<{ users: User[] }>('/users'),
+
+    create: (data: {
+      name: string
+      email: string
+      role: UserRole
+      employmentType: EmploymentType
+      hourlyRate?: number | null
+      monthlySalary?: number | null
+    }) =>
+      request<{ user: User }>('/users', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    update: (
+      id: string,
+      data: Partial<{
+        name: string
+        email: string
+        role: UserRole
+        employmentType: EmploymentType
+        hourlyRate: number | null
+        monthlySalary: number | null
+      }>,
+    ) =>
+      request<{ user: User }>(`/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
+    deactivate: (id: string) => request<{ success: boolean }>(`/users/${id}`, { method: 'DELETE' }),
   },
 }
