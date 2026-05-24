@@ -13,13 +13,14 @@ import { timeRecordsRouter } from './routes/time-records/index.js'
 import { usersRouter } from './routes/users/index.js'
 import { workTypesRouter } from './routes/work-types/index.js'
 import type { AppEnv } from './types.js'
+import process from 'node:process'
 
 const app = new Hono<AppEnv>().basePath('/api/v1')
 
 app.use(
   '*',
   cors({
-    origin: ['http://localhost:3000'],
+    origin: [process.env.FRONTEND_URL ?? ''],
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
