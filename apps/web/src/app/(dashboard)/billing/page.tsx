@@ -19,9 +19,9 @@ import {
   useCreateBillingContract,
   useDeleteBillingContract,
   useUpdateBillingContract,
-} from '@/hooks/use-billing'
-import { useWorkTypes } from '@/hooks/use-clock'
-import type { BillingContract, BillingType, WorkType } from '@/lib/api-client'
+} from '@/hooks/useBilling'
+import { useWorkTypes } from '@/hooks/useClock'
+import type { BillingContract, BillingType, WorkType } from '@/lib/apiClient'
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
 

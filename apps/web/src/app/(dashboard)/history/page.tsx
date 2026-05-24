@@ -2,10 +2,10 @@
 
 import { ChevronLeft, ChevronRight, Clock, Loader2 } from 'lucide-react'
 import { useState } from 'react'
-import { useWorkTypes } from '@/hooks/use-clock'
-import type { DayEntry, MonthSummary } from '@/hooks/use-history'
-import { useHistory } from '@/hooks/use-history'
-import type { WorkType } from '@/lib/api-client'
+import { useWorkTypes } from '@/hooks/useClock'
+import type { DayEntry, MonthSummary } from '@/hooks/useHistory'
+import { useHistory } from '@/hooks/useHistory'
+import type { WorkType } from '@/lib/apiClient'
 
 // ─── カラーマップ ─────────────────────────────────────────────────────────────
 

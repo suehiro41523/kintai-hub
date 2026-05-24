@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api-client'
+import { api } from '@/lib/apiClient'
 
 const TODAY_KEY = ['time-records', 'today'] as const
 const WORK_TYPES_KEY = ['work-types'] as const

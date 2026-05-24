@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api-client'
+import { api } from '@/lib/apiClient'
 
 const WORK_TYPES_KEY = ['work-types']
 

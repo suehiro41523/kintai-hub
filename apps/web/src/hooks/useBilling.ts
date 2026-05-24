@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api-client'
+import { api } from '@/lib/apiClient'
 
 export function useBillingContracts() {
   return useQuery({

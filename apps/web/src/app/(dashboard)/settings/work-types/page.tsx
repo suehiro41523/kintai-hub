@@ -2,14 +2,14 @@
 
 import { ChevronDown, ChevronUp, Loader2, Pencil, Plus, Settings, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
-import { useWorkTypes } from '@/hooks/use-clock'
+import { useWorkTypes } from '@/hooks/useClock'
 import {
   useCreateWorkType,
   useDeactivateWorkType,
   useReorderWorkTypes,
   useUpdateWorkType,
-} from '@/hooks/use-work-types'
-import type { BillingType, WorkType } from '@/lib/api-client'
+} from '@/hooks/useWorkTypes'
+import type { BillingType, WorkType } from '@/lib/apiClient'
 
 // ─── 定数 ─────────────────────────────────────────────────────────────────────
 

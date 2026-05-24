@@ -21,9 +21,9 @@ import {
   useSwitchType,
   useTodayRecords,
   useWorkTypes,
-} from '@/hooks/use-clock'
-import type { RecordType, WorkType } from '@/lib/api-client'
-import { ApiError } from '@/lib/api-client'
+} from '@/hooks/useClock'
+import type { RecordType, WorkType } from '@/lib/apiClient'
+import { ApiError } from '@/lib/apiClient'
 
 // ─── 定数 ─────────────────────────────────────────────────────────────────────
 

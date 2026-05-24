@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import type { TimeRecord, WorkType } from '@/lib/api-client'
-import { api } from '@/lib/api-client'
+import type { TimeRecord, WorkType } from '@/lib/apiClient'
+import { api } from '@/lib/apiClient'
 
 function toDateParam(d: Date): string {
   return d.toISOString().slice(0, 10)
