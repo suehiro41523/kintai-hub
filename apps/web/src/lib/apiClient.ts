@@ -137,6 +137,14 @@ export interface MonthlyReport {
   billingBreakdown: BillingBreakdown[]
 }
 
+export interface AuthUser {
+  id: string
+  tenantId: string
+  name: string
+  email: string
+  role: string
+}
+
 export interface ShiftPattern {
   id: string
   tenantId: string
@@ -192,7 +200,7 @@ export class ApiError extends Error {
 
 // ─── fetch ラッパー ────────────────────────────────────────────────────────────
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+const BASE_URL = ''
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}/api/v1${path}`, {
@@ -212,6 +220,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // ─── API クライアント ──────────────────────────────────────────────────────────
 
 export const api = {
+  auth: {
+    signIn: (email: string, password: string) =>
+      request<{ user: AuthUser }>('/auth/sign-in', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      }),
+
+    signOut: () => request<{ success: boolean }>('/auth/sign-out', { method: 'POST' }),
+
+    me: () => request<{ user: AuthUser }>('/auth/me'),
+  },
+
   workTypes: {
     list: () => request<{ workTypes: WorkType[] }>('/work-types'),
 

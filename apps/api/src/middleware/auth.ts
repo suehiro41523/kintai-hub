@@ -1,18 +1,30 @@
+import { getCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
+import { verify } from 'hono/jwt'
 import type { AppEnv } from '../types.js'
 
-const STUB_USER_ID = '00000000-0000-0000-0000-000000000002'
-const STUB_TENANT_ID = '00000000-0000-0000-0000-000000000001'
+const COOKIE_NAME = 'kintai_session'
 
-// スタブ: 本来は Better Auth でセッション検証を行う
 export const verifySession = createMiddleware<AppEnv>(async (c, next) => {
-  c.set('userId', STUB_USER_ID)
-  c.set('role', 'employee')
+  const token = getCookie(c, COOKIE_NAME)
+  if (!token) {
+    return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
+  }
+
+  const secret = process.env.JWT_SECRET ?? 'dev-secret'
+  try {
+    const payload = await verify(token, secret, 'HS256')
+    c.set('userId', payload.sub as string)
+    c.set('role', payload.role as string)
+  } catch {
+    return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
+  }
+
   await next()
 })
 
-// スタブ: 本来は SET app.tenant_id をDBセッションに実行してRLSを有効化する
+// Phase 2: SET app.tenant_id でRLSを有効化する
 export const injectTenantContext = createMiddleware<AppEnv>(async (c, next) => {
-  c.set('tenantId', STUB_TENANT_ID)
+  c.set('tenantId', '00000000-0000-0000-0000-000000000001')
   await next()
 })

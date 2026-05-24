@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from './lib/logger.js'
 import { requestLogger } from './middleware/request-logger.js'
+import { authRouter } from './routes/auth/index.js'
 import { billingRouter } from './routes/billing/index.js'
 import { reportsRouter } from './routes/reports/index.js'
 import { requestsRouter } from './routes/requests/index.js'
@@ -26,6 +27,7 @@ app.use(
 )
 app.use('*', requestLogger)
 
+app.route('/auth', authRouter)
 app.route('/work-types', workTypesRouter)
 app.route('/time-records', timeRecordsRouter)
 app.route('/billing', billingRouter)

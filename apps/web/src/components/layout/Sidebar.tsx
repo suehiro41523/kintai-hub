@@ -7,11 +7,13 @@ import {
   DollarSign,
   FileText,
   History,
+  LogOut,
   Settings,
   Users,
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useMe, useSignOut } from '@/hooks/useAuth'
 
 const NAV_ITEMS = [
   { href: '/clock', icon: Clock, label: '打刻' },
@@ -27,10 +29,12 @@ const SETTINGS_ITEMS = [
   { href: '/settings/work-types', icon: Settings, label: '設定' },
 ] as const
 
-const MOCK_USER = { name: '田中太郎', department: '開発部' }
-
 export function Sidebar() {
   const pathname = usePathname()
+  const { data: user } = useMe()
+  const signOut = useSignOut()
+
+  const initial = user?.name?.charAt(0) ?? '?'
 
   return (
     <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
@@ -91,12 +95,21 @@ export function Sidebar() {
       <div className="border-t border-slate-100 px-4 py-3">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm shrink-0">
-            田
+            {initial}
           </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-slate-800 truncate">{MOCK_USER.name}</div>
-            <div className="text-xs text-slate-500 truncate">{MOCK_USER.department}</div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-slate-800 truncate">{user?.name ?? ''}</div>
+            <div className="text-xs text-slate-500 truncate">{user?.email ?? ''}</div>
           </div>
+          <button
+            type="button"
+            onClick={() => signOut.mutate()}
+            disabled={signOut.isPending}
+            className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+            title="ログアウト"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </aside>
