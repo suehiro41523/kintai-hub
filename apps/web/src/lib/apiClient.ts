@@ -87,6 +87,37 @@ export interface BillingSummary {
   createdAt: string
 }
 
+export interface WorkTypeHours {
+  workTypeId: string
+  workTypeName: string
+  color: string
+  isBillable: boolean
+  hours: number
+  percentage: number
+}
+
+export interface BillingBreakdown {
+  contractId: string
+  clientName: string
+  billingType: string
+  workTypeId: string
+  workTypeName: string
+  actualHours: number
+  billingHours: number | null
+  billingAmount: number | null
+  status: 'uncalculated' | 'draft' | 'confirmed'
+}
+
+export interface MonthlyReport {
+  year: number
+  month: number
+  totalHours: number
+  billableHours: number
+  nonBillableHours: number
+  workTypeBreakdown: WorkTypeHours[]
+  billingBreakdown: BillingBreakdown[]
+}
+
 // ─── エラークラス ──────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
@@ -258,5 +289,10 @@ export const api = {
       request<{ summary: BillingSummary }>(`/billing/summaries/${summaryId}/confirm`, {
         method: 'POST',
       }),
+  },
+
+  reports: {
+    monthly: (year: number, month: number) =>
+      request<{ report: MonthlyReport }>(`/reports/monthly?year=${year}&month=${month}`),
   },
 }
