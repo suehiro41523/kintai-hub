@@ -200,7 +200,9 @@ export class ApiError extends Error {
 
 // ─── fetch ラッパー ────────────────────────────────────────────────────────────
 
-const BASE_URL = ''
+// 本番: NEXT_PUBLIC_API_URL=https://your-api.onrender.com（直接呼び出し）
+// ローカル: 未設定 → 相対パス → next.config.ts の rewrite でプロキシ
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}/api/v1${path}`, {

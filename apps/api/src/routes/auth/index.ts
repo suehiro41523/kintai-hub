@@ -43,9 +43,13 @@ export const authRouter = new Hono<AppEnv>()
       getSecret(),
     )
 
+    const proto = c.req.header('x-forwarded-proto') ?? new URL(c.req.url).protocol.replace(':', '')
+    const secure = proto === 'https'
+
     setCookie(c, COOKIE_NAME, token, {
       httpOnly: true,
-      sameSite: 'Lax',
+      sameSite: secure ? 'None' : 'Lax',
+      secure,
       path: '/',
       maxAge: COOKIE_MAX_AGE,
     })
@@ -62,7 +66,9 @@ export const authRouter = new Hono<AppEnv>()
   })
 
   .post('/sign-out', (c) => {
-    deleteCookie(c, COOKIE_NAME, { path: '/' })
+    const proto = c.req.header('x-forwarded-proto') ?? new URL(c.req.url).protocol.replace(':', '')
+    const secure = proto === 'https'
+    deleteCookie(c, COOKIE_NAME, { path: '/', secure, sameSite: secure ? 'None' : 'Lax' })
     return c.json({ success: true })
   })
 
