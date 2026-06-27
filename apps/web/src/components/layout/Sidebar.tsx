@@ -12,6 +12,7 @@ import {
   Users,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { useMe, useSignOut } from '@/hooks/useAuth'
 
@@ -29,15 +30,19 @@ const SETTINGS_ITEMS = [
   { href: '/settings/work-types', icon: Settings, label: '設定' },
 ] as const
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean
+  onClose?: () => void
+}
+
+function NavContent() {
   const pathname = usePathname()
   const { data: user } = useMe()
   const signOut = useSignOut()
-
   const initial = user?.name?.charAt(0) ?? '?'
 
   return (
-    <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+    <>
       {/* ロゴ */}
       <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
         <div className="rounded-lg bg-blue-600 p-1.5">
@@ -112,6 +117,39 @@ export function Sidebar() {
           </button>
         </div>
       </div>
-    </aside>
+    </>
+  )
+}
+
+export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
+  const pathname = usePathname()
+
+  useEffect(() => {
+    onClose?.()
+  }, [pathname, onClose])
+
+  return (
+    <>
+      {/* モバイル: オーバーレイ */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-60 shrink-0 flex flex-col border-r border-slate-200 bg-white transition-transform duration-200 md:hidden ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <NavContent />
+      </aside>
+
+      {/* デスクトップ: 固定サイドバー */}
+      <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+        <NavContent />
+      </aside>
+    </>
   )
 }
