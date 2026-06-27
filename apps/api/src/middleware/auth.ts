@@ -1,30 +1,34 @@
-import { getCookie } from 'hono/cookie'
+import { sql } from 'drizzle-orm'
 import { createMiddleware } from 'hono/factory'
-import { verify } from 'hono/jwt'
+import { db } from '../db/index.js'
+import { findUserById } from '../db/queries/users.js'
+import { auth } from '../lib/auth.js'
 import type { AppEnv } from '../types.js'
 
-const COOKIE_NAME = 'kintai_session'
-
 export const verifySession = createMiddleware<AppEnv>(async (c, next) => {
-  const token = getCookie(c, COOKIE_NAME)
-  if (!token) {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers })
+
+  if (!session?.user) {
     return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
   }
 
-  const secret = process.env.JWT_SECRET ?? 'dev-secret'
-  try {
-    const payload = await verify(token, secret, 'HS256')
-    c.set('userId', payload.sub as string)
-    c.set('role', payload.role as string)
-  } catch {
+  const coreUser = await findUserById(session.user.id)
+  if (!coreUser || !coreUser.isActive) {
     return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
   }
+
+  c.set('userId', coreUser.id)
+  c.set('tenantId', coreUser.tenantId)
+  c.set('role', coreUser.role)
 
   await next()
 })
 
-// Phase 2: SET app.tenant_id でRLSを有効化する
 export const injectTenantContext = createMiddleware<AppEnv>(async (c, next) => {
-  c.set('tenantId', '00000000-0000-0000-0000-000000000001')
+  const tenantId = c.get('tenantId')
+  if (!tenantId) {
+    return c.json({ error: 'Forbidden', code: 'FORBIDDEN' }, 403)
+  }
+  await db.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
   await next()
 })

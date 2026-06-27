@@ -1,95 +1,99 @@
-import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
-import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
-import { sign, verify } from 'hono/jwt'
-import { z } from 'zod'
+import { findUserById } from '../../db/queries/users.js'
+import { auth } from '../../lib/auth.js'
 import type { AppEnv } from '../../types.js'
 
-const COOKIE_NAME = 'kintai_session'
-const STUB_USER_ID = '00000000-0000-0000-0000-000000000002'
-const STUB_TENANT_ID = '00000000-0000-0000-0000-000000000001'
-const COOKIE_MAX_AGE = 60 * 60 * 24 // 24h
-
-const SignInSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-})
-
-function getSecret(): string {
-  return process.env.JWT_SECRET ?? 'dev-secret'
-}
-
+// Better Auth のネイティブエンドポイントに対するラッパー。
+// フロントエンドの既存 API 呼び出しとの互換性を保ちつつ、core.users のデータを返す。
 export const authRouter = new Hono<AppEnv>()
 
-  .post('/sign-in', zValidator('json', SignInSchema), async (c) => {
-    const { email, password } = c.req.valid('json')
-    const testEmail = process.env.TEST_EMAIL ?? 'admin@example.com'
-    const testPassword = process.env.TEST_PASSWORD ?? 'password'
+  .post('/sign-in', async (c) => {
+    const body = await c.req.json<{ email?: string; password?: string }>()
 
-    if (email !== testEmail || password !== testPassword) {
+    if (!body.email || !body.password) {
       return c.json(
-        { error: 'メールアドレスまたはパスワードが正しくありません', code: 'INVALID_CREDENTIALS' },
+        { error: 'メールアドレスとパスワードを入力してください', code: 'INVALID_REQUEST' },
+        400,
+      )
+    }
+
+    // Better Auth でパスワード検証 + セッション Cookie を発行する
+    const baResponse = await auth.api.signInEmail({
+      body: { email: body.email, password: body.password },
+      headers: c.req.raw.headers,
+      asResponse: true,
+    })
+
+    if (!baResponse.ok) {
+      return c.json(
+        {
+          error: 'メールアドレスまたはパスワードが正しくありません',
+          code: 'INVALID_CREDENTIALS',
+        },
         401,
       )
     }
 
-    const token = await sign(
-      {
-        sub: STUB_USER_ID,
-        tenantId: STUB_TENANT_ID,
-        role: 'admin',
-        exp: Math.floor(Date.now() / 1000) + COOKIE_MAX_AGE,
-      },
-      getSecret(),
-    )
+    const baData = (await baResponse.json()) as { user: { id: string } }
+    const coreUser = await findUserById(baData.user.id)
 
-    const proto = c.req.header('x-forwarded-proto') ?? new URL(c.req.url).protocol.replace(':', '')
-    const secure = proto === 'https'
+    if (!coreUser || !coreUser.isActive) {
+      return c.json({ error: 'アカウントが無効です', code: 'ACCOUNT_INACTIVE' }, 401)
+    }
 
-    setCookie(c, COOKIE_NAME, token, {
-      httpOnly: true,
-      sameSite: secure ? 'None' : 'Lax',
-      secure,
-      path: '/',
-      maxAge: COOKIE_MAX_AGE,
-    })
+    // Better Auth が発行した Set-Cookie をそのままフロントに転送する
+    for (const [key, value] of baResponse.headers.entries()) {
+      if (key.toLowerCase() === 'set-cookie') {
+        c.header('set-cookie', value, { append: true })
+      }
+    }
 
     return c.json({
       user: {
-        id: STUB_USER_ID,
-        tenantId: STUB_TENANT_ID,
-        name: '管理者',
-        email: testEmail,
-        role: 'admin',
+        id: coreUser.id,
+        tenantId: coreUser.tenantId,
+        name: coreUser.name,
+        email: coreUser.email,
+        role: coreUser.role,
       },
     })
   })
 
-  .post('/sign-out', (c) => {
-    const proto = c.req.header('x-forwarded-proto') ?? new URL(c.req.url).protocol.replace(':', '')
-    const secure = proto === 'https'
-    deleteCookie(c, COOKIE_NAME, { path: '/', secure, sameSite: secure ? 'None' : 'Lax' })
+  .post('/sign-out', async (c) => {
+    const baResponse = await auth.api.signOut({
+      headers: c.req.raw.headers,
+      asResponse: true,
+    })
+
+    // Better Auth が発行したクッキー削除ヘッダーを転送する
+    for (const [key, value] of baResponse.headers.entries()) {
+      if (key.toLowerCase() === 'set-cookie') {
+        c.header('set-cookie', value, { append: true })
+      }
+    }
+
     return c.json({ success: true })
   })
 
   .get('/me', async (c) => {
-    const token = getCookie(c, COOKIE_NAME)
-    if (!token) {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers })
+
+    if (!session?.user) {
       return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
     }
 
-    try {
-      const payload = await verify(token, getSecret(), 'HS256')
-      return c.json({
-        user: {
-          id: payload.sub,
-          tenantId: payload.tenantId,
-          role: payload.role,
-          name: '管理者',
-          email: process.env.TEST_EMAIL ?? 'admin@example.com',
-        },
-      })
-    } catch {
+    const coreUser = await findUserById(session.user.id)
+    if (!coreUser || !coreUser.isActive) {
       return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
     }
+
+    return c.json({
+      user: {
+        id: coreUser.id,
+        tenantId: coreUser.tenantId,
+        name: coreUser.name,
+        email: coreUser.email,
+        role: coreUser.role,
+      },
+    })
   })

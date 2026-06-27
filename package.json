@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "yarn workspaces foreach --parallel --interlaced run dev",
+    "dev": "yarn workspaces foreach --all --parallel --interlaced run dev",
     "dev:web": "yarn workspace @kintai/web dev",
     "dev:api": "yarn workspace @kintai/api dev",
     "build": "yarn workspace @kintai/web build",

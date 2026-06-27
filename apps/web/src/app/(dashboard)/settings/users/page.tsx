@@ -35,6 +35,7 @@ interface FormState {
   employmentType: EmploymentType
   hourlyRate: string
   monthlySalary: string
+  initialPassword: string
 }
 
 function emptyForm(): FormState {
@@ -46,6 +47,7 @@ function emptyForm(): FormState {
     employmentType: 'full_time',
     hourlyRate: '',
     monthlySalary: '',
+    initialPassword: '',
   }
 }
 
@@ -58,6 +60,7 @@ function userToForm(u: User): FormState {
     employmentType: u.employmentType as EmploymentType,
     hourlyRate: u.hourlyRate?.toString() ?? '',
     monthlySalary: u.monthlySalary?.toString() ?? '',
+    initialPassword: '',
   }
 }
 
@@ -177,6 +180,26 @@ function UserForm({ form, onChange, onSubmit, onCancel, isPending, error }: User
             />
           </div>
         )}
+
+        {!form.id && (
+          <div className="col-span-2">
+            <label htmlFor="uf-password" className="block text-sm font-medium text-gray-700 mb-1">
+              初期パスワード
+            </label>
+            <input
+              id="uf-password"
+              type="password"
+              value={form.initialPassword}
+              onChange={(e) => set({ initialPassword: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="8文字以上"
+              minLength={8}
+            />
+            {form.initialPassword.length > 0 && form.initialPassword.length < 8 && (
+              <p className="text-xs text-red-500 mt-1">8文字以上で入力してください</p>
+            )}
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -185,7 +208,12 @@ function UserForm({ form, onChange, onSubmit, onCancel, isPending, error }: User
         <button
           type="button"
           onClick={onSubmit}
-          disabled={isPending || !form.name.trim() || !form.email.trim()}
+          disabled={
+            isPending ||
+            !form.name.trim() ||
+            !form.email.trim() ||
+            (!form.id && form.initialPassword.length < 8)
+          }
           className="flex-1 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isPending ? (
@@ -233,7 +261,7 @@ export default function UsersSettingsPage() {
   async function handleSubmit() {
     if (!modalForm) return
     setFormError(null)
-    const payload = {
+    const base = {
       name: modalForm.name.trim(),
       email: modalForm.email.trim(),
       role: modalForm.role,
@@ -243,9 +271,9 @@ export default function UsersSettingsPage() {
     }
     try {
       if (modalForm.id) {
-        await updateMut.mutateAsync({ id: modalForm.id, data: payload })
+        await updateMut.mutateAsync({ id: modalForm.id, data: base })
       } else {
-        await createMut.mutateAsync(payload)
+        await createMut.mutateAsync({ ...base, initialPassword: modalForm.initialPassword })
       }
       setModalForm(null)
     } catch {

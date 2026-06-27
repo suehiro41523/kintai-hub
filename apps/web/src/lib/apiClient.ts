@@ -387,6 +387,7 @@ export const api = {
       employmentType: EmploymentType
       hourlyRate?: number | null
       monthlySalary?: number | null
+      initialPassword: string
     }) =>
       request<{ user: User }>('/users', {
         method: 'POST',

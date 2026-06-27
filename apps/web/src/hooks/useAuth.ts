@@ -21,6 +21,7 @@ export function useSignIn() {
     mutationFn: ({ email, password }: { email: string; password: string }) =>
       api.auth.signIn(email, password),
     onSuccess: (data) => {
+      qc.clear()
       qc.setQueryData(ME_KEY, data.user)
     },
   })

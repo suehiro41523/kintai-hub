@@ -22,6 +22,16 @@ function mapUser(row: UserRow): MappedUser {
 
 // ─── クエリ ───────────────────────────────────────────────────────────────────
 
+export async function findUserByEmail(email: string): Promise<MappedUser | null> {
+  const [row] = await db.select().from(users).where(eq(users.email, email))
+  return row ? mapUser(row) : null
+}
+
+export async function findUserById(id: string): Promise<MappedUser | null> {
+  const [row] = await db.select().from(users).where(eq(users.id, id))
+  return row ? mapUser(row) : null
+}
+
 export async function listUsers(tenantId: string): Promise<MappedUser[]> {
   const rows = await db
     .select()
@@ -40,6 +50,7 @@ export async function findUser(tenantId: string, id: string): Promise<MappedUser
 }
 
 export type CreateUserData = {
+  id?: string
   tenantId: string
   name: string
   email: string
@@ -53,7 +64,7 @@ export async function createUser(data: CreateUserData): Promise<MappedUser> {
   const [row] = await db
     .insert(users)
     .values({
-      id: randomUUID(),
+      id: data.id ?? randomUUID(),
       tenantId: data.tenantId,
       name: data.name,
       email: data.email,

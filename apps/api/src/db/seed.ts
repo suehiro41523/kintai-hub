@@ -1,6 +1,9 @@
 import 'dotenv/config'
+import { randomUUID } from 'node:crypto'
+import { hashPassword } from 'better-auth/crypto'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
+import { authAccount, authUser } from './schema/auth.js'
 import { workTypes } from './schema/app.js'
 import { departments, tenants, users } from './schema/core.js'
 
@@ -10,12 +13,17 @@ if (!databaseUrl) throw new Error('DATABASE_URL is not set')
 const client = postgres(databaseUrl, { max: 1 })
 const db = drizzle(client)
 
-// スタブで使用していた固定ID（auth ミドルウェアと一致させる）
 const TENANT_ID = '00000000-0000-0000-0000-000000000001'
-const USER_ID = '00000000-0000-0000-0000-000000000002'
 const DEPT_ID = '00000000-0000-0000-0000-000000000003'
 
+const ADMIN_EMAIL = process.env.TEST_EMAIL ?? 'admin@example.com'
+const ADMIN_PASSWORD = process.env.TEST_PASSWORD ?? 'password'
+const ADMIN_USER_ID = randomUUID()
+
+const now = new Date('2026-01-01')
+
 await db.transaction(async (tx) => {
+  // テナント
   await tx
     .insert(tenants)
     .values({
@@ -24,11 +32,12 @@ await db.transaction(async (tx) => {
       plan: 'standard',
       status: 'active',
       maxUsers: 100,
-      createdAt: new Date('2026-01-01'),
-      updatedAt: new Date('2026-01-01'),
+      createdAt: now,
+      updatedAt: now,
     })
     .onConflictDoNothing()
 
+  // 部署
   await tx
     .insert(departments)
     .values({
@@ -36,26 +45,11 @@ await db.transaction(async (tx) => {
       tenantId: TENANT_ID,
       name: '開発部',
       sortOrder: 1,
-      createdAt: new Date('2026-01-01'),
+      createdAt: now,
     })
     .onConflictDoNothing()
 
-  await tx
-    .insert(users)
-    .values({
-      id: USER_ID,
-      tenantId: TENANT_ID,
-      departmentId: DEPT_ID,
-      name: '田中太郎',
-      email: 'tanaka@test.example.com',
-      role: 'employee',
-      employmentType: 'full_time',
-      isActive: true,
-      createdAt: new Date('2026-01-01'),
-      updatedAt: new Date('2026-01-01'),
-    })
-    .onConflictDoNothing()
-
+  // ワークタイプ
   await tx
     .insert(workTypes)
     .values([
@@ -68,7 +62,7 @@ await db.transaction(async (tx) => {
         isBillable: false,
         isActive: true,
         sortOrder: 1,
-        createdAt: new Date('2026-01-01'),
+        createdAt: now,
       },
       {
         id: '10000000-0000-0000-0000-000000000002',
@@ -79,7 +73,7 @@ await db.transaction(async (tx) => {
         isBillable: true,
         isActive: true,
         sortOrder: 2,
-        createdAt: new Date('2026-01-01'),
+        createdAt: now,
       },
       {
         id: '10000000-0000-0000-0000-000000000003',
@@ -90,7 +84,7 @@ await db.transaction(async (tx) => {
         isBillable: true,
         isActive: true,
         sortOrder: 3,
-        createdAt: new Date('2026-01-01'),
+        createdAt: now,
       },
       {
         id: '10000000-0000-0000-0000-000000000004',
@@ -101,11 +95,56 @@ await db.transaction(async (tx) => {
         isBillable: false,
         isActive: true,
         sortOrder: 4,
-        createdAt: new Date('2026-01-01'),
+        createdAt: now,
       },
     ])
     .onConflictDoNothing()
+
+  // Better Auth ユーザー（auth.user）
+  const hashedPwd = await hashPassword(ADMIN_PASSWORD)
+  await tx
+    .insert(authUser)
+    .values({
+      id: ADMIN_USER_ID,
+      name: '管理者',
+      email: ADMIN_EMAIL,
+      emailVerified: false,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoNothing()
+
+  // Better Auth アカウント（auth.account）
+  await tx
+    .insert(authAccount)
+    .values({
+      id: randomUUID(),
+      accountId: ADMIN_USER_ID,
+      providerId: 'credential',
+      userId: ADMIN_USER_ID,
+      password: hashedPwd,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoNothing()
+
+  // core.users（業務データ）
+  await tx
+    .insert(users)
+    .values({
+      id: ADMIN_USER_ID,
+      tenantId: TENANT_ID,
+      departmentId: DEPT_ID,
+      name: '管理者',
+      email: ADMIN_EMAIL,
+      role: 'admin',
+      employmentType: 'full_time',
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoNothing()
 })
 
-console.log('Seed complete')
+console.log(`Seed complete: 管理者ユーザー ${ADMIN_EMAIL} を作成しました`)
 await client.end()

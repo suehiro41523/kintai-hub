@@ -2,7 +2,6 @@
 
 import {
   ArrowLeftRight,
-  Building2,
   CheckCircle2,
   Clock,
   Coffee,
@@ -13,6 +12,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useMe } from '@/hooks/useAuth'
 import {
   useBreakEnd,
   useBreakStart,
@@ -27,7 +27,11 @@ import { ApiError } from '@/lib/apiClient'
 
 // ─── 定数 ─────────────────────────────────────────────────────────────────────
 
-const MOCK_USER = { name: '田中太郎', department: '開発部', employeeCode: 'EMP-0042' }
+const ROLE_LABEL: Record<string, string> = {
+  admin: '管理者',
+  manager: 'マネージャー',
+  employee: '従業員',
+}
 
 // ─── スタイルマップ（color hex → Tailwind クラス） ────────────────────────────
 // Tailwind の動的クラスは purge されるため静的マッピングが必要
@@ -146,6 +150,7 @@ export default function ClockPage() {
   )
 
   // ── API データ ──
+  const { data: me } = useMe()
   const { data: wtData, isLoading: wtLoading } = useWorkTypes()
   const { data: todayData, isLoading: todayLoading } = useTodayRecords()
 
@@ -287,12 +292,9 @@ export default function ClockPage() {
       <div className="mb-6">
         <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
           <User className="h-3.5 w-3.5" />
-          <span>{MOCK_USER.name}</span>
+          <span>{me?.name ?? ''}</span>
           <span className="text-slate-300">·</span>
-          <Building2 className="h-3.5 w-3.5" />
-          <span>{MOCK_USER.department}</span>
-          <span className="text-slate-300">·</span>
-          <span className="font-mono text-xs">{MOCK_USER.employeeCode}</span>
+          <span>{ROLE_LABEL[me?.role ?? ''] ?? me?.role}</span>
         </div>
         <h1 className="text-2xl font-bold text-slate-800">打刻</h1>
         <p className="text-slate-500 text-sm mt-0.5">{now ? formatDate(now) : ''}</p>
