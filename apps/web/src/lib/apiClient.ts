@@ -142,7 +142,7 @@ export interface AuthUser {
   tenantId: string
   name: string
   email: string
-  role: string
+  role: UserRole
 }
 
 export interface ShiftPattern {

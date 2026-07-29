@@ -3,6 +3,7 @@
 import * as HolidayJP from '@holiday-jp/holiday_jp'
 import { ChevronLeft, ChevronRight, Layers, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useMe } from '@/hooks/useAuth'
 import {
   useBulkUpsertShifts,
   useCreateShiftPattern,
@@ -1117,6 +1118,8 @@ function ShiftPatternsTab() {
 type Tab = 'my' | 'team' | 'patterns'
 
 export default function ShiftsPage() {
+  const { data: me } = useMe()
+  const role = me?.role
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth() + 1)
@@ -1136,11 +1139,12 @@ export default function ShiftsPage() {
     } else setMonth((m) => m + 1)
   }
 
-  const TABS: { key: Tab; label: string }[] = [
-    { key: 'my', label: '自分のシフト' },
-    { key: 'team', label: 'チームシフト' },
-    { key: 'patterns', label: 'シフトパターン' },
+  const ALL_TABS: { key: Tab; label: string; roles: ('admin' | 'manager' | 'employee')[] }[] = [
+    { key: 'my', label: '自分のシフト', roles: ['admin', 'manager', 'employee'] },
+    { key: 'team', label: 'チームシフト', roles: ['admin', 'manager'] },
+    { key: 'patterns', label: 'シフトパターン', roles: ['admin'] },
   ]
+  const TABS = role ? ALL_TABS.filter((t) => t.roles.includes(role)) : ALL_TABS.slice(0, 1)
 
   return (
     <div className="max-w-5xl mx-auto p-4 space-y-4">

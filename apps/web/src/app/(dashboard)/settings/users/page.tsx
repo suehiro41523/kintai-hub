@@ -1,7 +1,9 @@
 'use client'
 
 import { AlertTriangle, Loader2, Pencil, Plus, UserX } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useMe } from '@/hooks/useAuth'
 import { useCreateUser, useDeactivateUser, useUpdateUser, useUsers } from '@/hooks/useUsers'
 import type { EmploymentType, User, UserRole } from '@/lib/apiClient'
 
@@ -239,10 +241,18 @@ function UserForm({ form, onChange, onSubmit, onCancel, isPending, error }: User
 // ─── ページ ──────────────────────────────────────────────────────────────────
 
 export default function UsersSettingsPage() {
+  const { data: me } = useMe()
+  const router = useRouter()
   const { data: userList = [], isLoading } = useUsers()
   const createMut = useCreateUser()
   const updateMut = useUpdateUser()
   const deactivateMut = useDeactivateUser()
+
+  useEffect(() => {
+    if (me && me.role !== 'admin') router.replace('/clock')
+  }, [me, router])
+
+  if (!me || me.role !== 'admin') return null
 
   const [modalForm, setModalForm] = useState<FormState | null>(null)
   const [formError, setFormError] = useState<string | null>(null)

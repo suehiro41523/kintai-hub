@@ -15,20 +15,28 @@ import Link from 'next/link'
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { useMe, useSignOut } from '@/hooks/useAuth'
+import type { UserRole } from '@/lib/apiClient'
 
-const NAV_ITEMS = [
-  { href: '/clock', icon: Clock, label: '打刻' },
-  { href: '/history', icon: History, label: '勤怠履歴' },
-  { href: '/shifts', icon: Calendar, label: 'シフト' },
-  { href: '/requests', icon: FileText, label: '申請' },
-  { href: '/reports', icon: BarChart2, label: 'レポート' },
-  { href: '/billing', icon: DollarSign, label: '精算・請求' },
-] as const
+type NavItem = {
+  href: string
+  icon: React.ElementType
+  label: string
+  roles: UserRole[]
+}
 
-const SETTINGS_ITEMS = [
-  { href: '/settings/users', icon: Users, label: '従業員管理' },
-  { href: '/settings/work-types', icon: Settings, label: '設定' },
-] as const
+const NAV_ITEMS: NavItem[] = [
+  { href: '/clock', icon: Clock, label: '打刻', roles: ['admin', 'manager', 'employee'] },
+  { href: '/history', icon: History, label: '勤怠履歴', roles: ['admin', 'manager', 'employee'] },
+  { href: '/shifts', icon: Calendar, label: 'シフト', roles: ['admin', 'manager', 'employee'] },
+  { href: '/requests', icon: FileText, label: '申請', roles: ['admin', 'manager', 'employee'] },
+  { href: '/reports', icon: BarChart2, label: 'レポート', roles: ['admin', 'manager', 'employee'] },
+  { href: '/billing', icon: DollarSign, label: '精算・請求', roles: ['admin', 'manager'] },
+]
+
+const SETTINGS_ITEMS: NavItem[] = [
+  { href: '/settings/users', icon: Users, label: '従業員管理', roles: ['admin'] },
+  { href: '/settings/work-types', icon: Settings, label: '設定', roles: ['admin'] },
+]
 
 interface SidebarProps {
   isOpen?: boolean
@@ -40,6 +48,10 @@ function NavContent() {
   const { data: user } = useMe()
   const signOut = useSignOut()
   const initial = user?.name?.charAt(0) ?? '?'
+  const role = user?.role
+
+  const visibleNavItems = role ? NAV_ITEMS.filter((item) => item.roles.includes(role)) : []
+  const visibleSettingsItems = role ? SETTINGS_ITEMS.filter((item) => item.roles.includes(role)) : []
 
   return (
     <>
@@ -53,7 +65,7 @@ function NavContent() {
 
       {/* ナビゲーション */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
-        {NAV_ITEMS.map((item) => {
+        {visibleNavItems.map((item) => {
           const active = pathname === item.href
           return (
             <Link
@@ -71,29 +83,33 @@ function NavContent() {
           )
         })}
 
-        <div className="pt-4 pb-1 px-3">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            管理
-          </span>
-        </div>
+        {visibleSettingsItems.length > 0 && (
+          <>
+            <div className="pt-4 pb-1 px-3">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                管理
+              </span>
+            </div>
 
-        {SETTINGS_ITEMS.map((item) => {
-          const active = pathname === item.href
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                active
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
-              }`}
-            >
-              <item.icon className={`h-4 w-4 ${active ? 'text-blue-600' : 'text-slate-400'}`} />
-              {item.label}
-            </Link>
-          )
-        })}
+            {visibleSettingsItems.map((item) => {
+              const active = pathname === item.href
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
+                  }`}
+                >
+                  <item.icon className={`h-4 w-4 ${active ? 'text-blue-600' : 'text-slate-400'}`} />
+                  {item.label}
+                </Link>
+              )
+            })}
+          </>
+        )}
       </nav>
 
       {/* ユーザーフッター */}

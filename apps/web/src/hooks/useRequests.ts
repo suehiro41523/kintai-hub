@@ -20,11 +20,12 @@ export function useMyRequests() {
   })
 }
 
-export function usePendingRequests() {
+export function usePendingRequests(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: PENDING_KEY,
     queryFn: () => api.requests.listPending().then((r) => r.requests),
     staleTime: 30_000,
+    enabled: options?.enabled ?? true,
   })
 }
 

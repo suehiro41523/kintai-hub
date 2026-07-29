@@ -10,7 +10,9 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useMe } from '@/hooks/useAuth'
 import {
   useBillingContracts,
   useBillingSummaries,
@@ -325,7 +327,7 @@ function ContractForm({
 
 // ─── 契約タブ ─────────────────────────────────────────────────────────────────
 
-function ContractsTab({ workTypes }: { workTypes: WorkType[] }) {
+function ContractsTab({ workTypes, isAdmin }: { workTypes: WorkType[]; isAdmin: boolean }) {
   const { data: contracts = [], isLoading } = useBillingContracts()
   const createMut = useCreateBillingContract()
   const updateMut = useUpdateBillingContract()
@@ -403,16 +405,18 @@ function ContractsTab({ workTypes }: { workTypes: WorkType[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          契約を追加
-        </button>
-      </div>
+      {isAdmin && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            契約を追加
+          </button>
+        </div>
+      )}
 
       {contracts.length === 0 && !form && (
         <div className="text-center py-16 text-gray-400 text-sm">
@@ -487,30 +491,32 @@ function ContractsTab({ workTypes }: { workTypes: WorkType[] }) {
                       `¥${formatAmount(c.baseAmount)}/月`}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(c)}
-                    className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                  >
-                    編集
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteId(c.id)}
-                    className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
-                    aria-label="削除"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(c)}
+                      className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                    >
+                      編集
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteId(c.id)}
+                      className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
+                      aria-label="削除"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
         ))}
       </div>
 
-      {form && !form.id && (
+      {isAdmin && form && !form.id && (
         <div className="bg-white rounded-xl border border-blue-200 p-4">
           <p className="text-sm font-medium text-gray-900 mb-4">新規契約</p>
           <ContractForm
@@ -584,7 +590,7 @@ function ContractsTab({ workTypes }: { workTypes: WorkType[] }) {
 
 // ─── 精算タブ ─────────────────────────────────────────────────────────────────
 
-function SummariesTab({ workTypes }: { workTypes: WorkType[] }) {
+function SummariesTab({ workTypes, isAdmin }: { workTypes: WorkType[]; isAdmin: boolean }) {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -695,7 +701,7 @@ function SummariesTab({ workTypes }: { workTypes: WorkType[] }) {
                     </p>
                   </div>
 
-                  {!confirmed && (
+                  {isAdmin && !confirmed && (
                     <button
                       type="button"
                       onClick={() => calculateMut.mutate({ contractId: c.id, year, month })}
@@ -751,7 +757,7 @@ function SummariesTab({ workTypes }: { workTypes: WorkType[] }) {
                           ¥{summary.billingAmount.toLocaleString('ja-JP')}
                         </span>
                       </div>
-                      {!confirmed && (
+                      {isAdmin && !confirmed && (
                         <button
                           type="button"
                           onClick={() => confirmMut.mutate({ summaryId: summary.id, year, month })}
@@ -787,9 +793,19 @@ function SummariesTab({ workTypes }: { workTypes: WorkType[] }) {
 type Tab = 'contracts' | 'summaries'
 
 export default function BillingPage() {
+  const { data: me } = useMe()
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>('summaries')
   const { data: workTypesData, isLoading: wtLoading } = useWorkTypes()
   const workTypes = workTypesData?.workTypes ?? []
+
+  useEffect(() => {
+    if (me && me.role === 'employee') router.replace('/clock')
+  }, [me, router])
+
+  if (!me || me.role === 'employee') return null
+
+  const isAdmin = me.role === 'admin'
 
   if (wtLoading) {
     return (
@@ -825,9 +841,9 @@ export default function BillingPage() {
       </div>
 
       {tab === 'summaries' ? (
-        <SummariesTab workTypes={workTypes} />
+        <SummariesTab workTypes={workTypes} isAdmin={isAdmin} />
       ) : (
-        <ContractsTab workTypes={workTypes} />
+        <ContractsTab workTypes={workTypes} isAdmin={isAdmin} />
       )}
     </div>
   )

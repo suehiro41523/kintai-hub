@@ -2,6 +2,7 @@
 
 import { CheckCircle, Clock, Loader2, Plus, Send, Trash2, XCircle } from 'lucide-react'
 import { useState } from 'react'
+import { useMe } from '@/hooks/useAuth'
 import {
   useApproveRequest,
   useCancelRequest,
@@ -370,11 +371,14 @@ function PendingCard({ req, onApprove, onReject, isPending }: PendingCardProps) 
 // ─── ページ ──────────────────────────────────────────────────────────────────
 
 export default function RequestsPage() {
+  const { data: me } = useMe()
+  const canApprove = me?.role === 'manager' || me?.role === 'admin'
+
   const [tab, setTab] = useState<'my' | 'pending'>('my')
   const [showForm, setShowForm] = useState(false)
 
   const { data: myRequests = [], isLoading: myLoading } = useMyRequests()
-  const { data: pendingRequests = [], isLoading: pendingLoading } = usePendingRequests()
+  const { data: pendingRequests = [], isLoading: pendingLoading } = usePendingRequests({ enabled: canApprove })
   const cancelMut = useCancelRequest()
   const approveMut = useApproveRequest()
   const rejectMut = useRejectRequest()
@@ -433,22 +437,24 @@ export default function RequestsPage() {
             </span>
           )}
         </button>
-        <button
-          type="button"
-          onClick={() => setTab('pending')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            tab === 'pending'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          承認待ち
-          {pendingRequests.length > 0 && (
-            <span className="ml-2 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">
-              {pendingRequests.length}
-            </span>
-          )}
-        </button>
+        {canApprove && (
+          <button
+            type="button"
+            onClick={() => setTab('pending')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'pending'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            承認待ち
+            {pendingRequests.length > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">
+                {pendingRequests.length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* 自分の申請タブ */}

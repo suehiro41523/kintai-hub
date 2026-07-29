@@ -1,7 +1,9 @@
 'use client'
 
 import { ChevronDown, ChevronUp, Loader2, Pencil, Plus, Settings, Trash2, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useMe } from '@/hooks/useAuth'
 import { useWorkTypes } from '@/hooks/useClock'
 import {
   useCreateWorkType,
@@ -217,6 +219,8 @@ function WorkTypeForm({
 // ─── メインコンポーネント ─────────────────────────────────────────────────────
 
 export default function WorkTypesSettingsPage() {
+  const { data: me } = useMe()
+  const router = useRouter()
   const { data: wtData, isLoading } = useWorkTypes()
   const workTypes = wtData?.workTypes ?? []
 
@@ -227,6 +231,12 @@ export default function WorkTypesSettingsPage() {
 
   const [modalForm, setModalForm] = useState<FormState | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (me && me.role !== 'admin') router.replace('/clock')
+  }, [me, router])
+
+  if (!me || me.role !== 'admin') return null
 
   const isMutating =
     createMutation.isPending ||
