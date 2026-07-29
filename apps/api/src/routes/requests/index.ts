@@ -10,7 +10,7 @@ import {
   rejectRequest,
 } from '../../db/queries/requests.js'
 import { logger } from '../../lib/logger.js'
-import { injectTenantContext, verifySession } from '../../middleware/auth.js'
+import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
 
 const REQUEST_TYPES = ['leave', 'overtime', 'correction'] as const
@@ -37,7 +37,7 @@ export const requestsRouter = new Hono<AppEnv>()
     return c.json({ requests: list })
   })
 
-  .get('/pending', verifySession, injectTenantContext, async (c) => {
+  .get('/pending', verifySession, injectTenantContext, requireRole('manager', 'admin'), async (c) => {
     const tenantId = c.get('tenantId')
     const list = await listPendingRequests(tenantId)
     return c.json({ requests: list })
@@ -59,6 +59,7 @@ export const requestsRouter = new Hono<AppEnv>()
     '/:id/approve',
     verifySession,
     injectTenantContext,
+    requireRole('manager', 'admin'),
     zValidator('json', ApproveSchema),
     async (c) => {
       const id = c.req.param('id')
@@ -81,6 +82,7 @@ export const requestsRouter = new Hono<AppEnv>()
     '/:id/reject',
     verifySession,
     injectTenantContext,
+    requireRole('manager', 'admin'),
     zValidator('json', ApproveSchema),
     async (c) => {
       const id = c.req.param('id')

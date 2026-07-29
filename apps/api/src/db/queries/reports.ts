@@ -87,6 +87,7 @@ export async function getMonthlyReport(
   tenantId: string,
   year: number,
   month: number,
+  userId?: string,
 ): Promise<MonthlyReport> {
   const from = new Date(Date.UTC(year, month - 1, 1))
   const to = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999))
@@ -109,6 +110,7 @@ export async function getMonthlyReport(
           eq(timeRecords.tenantId, tenantId),
           gte(timeRecords.clockedAt, from),
           lte(timeRecords.clockedAt, to),
+          userId ? eq(timeRecords.userId, userId) : undefined,
         ),
       )
       .orderBy(asc(timeRecords.workTypeId), asc(timeRecords.clockedAt)),

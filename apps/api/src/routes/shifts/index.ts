@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { deleteShift, listMyShifts, listTeamShifts, upsertShifts } from '../../db/queries/shifts.js'
 import { logger } from '../../lib/logger.js'
-import { injectTenantContext, verifySession } from '../../middleware/auth.js'
+import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
 
 const BulkUpsertSchema = z.object({
@@ -34,7 +34,7 @@ export const shiftsRouter = new Hono<AppEnv>()
     return c.json({ shifts: list })
   })
 
-  .get('/team', verifySession, injectTenantContext, async (c) => {
+  .get('/team', verifySession, injectTenantContext, requireRole('manager', 'admin'), async (c) => {
     const tenantId = c.get('tenantId')
     const { from, to, userId } = c.req.query()
     if (!from || !to) {
@@ -48,6 +48,7 @@ export const shiftsRouter = new Hono<AppEnv>()
     '/bulk',
     verifySession,
     injectTenantContext,
+    requireRole('manager', 'admin'),
     zValidator('json', BulkUpsertSchema),
     async (c) => {
       const { shifts } = c.req.valid('json')
@@ -62,7 +63,7 @@ export const shiftsRouter = new Hono<AppEnv>()
     },
   )
 
-  .delete('/:id', verifySession, injectTenantContext, async (c) => {
+  .delete('/:id', verifySession, injectTenantContext, requireRole('manager', 'admin'), async (c) => {
     const id = c.req.param('id')
     const tenantId = c.get('tenantId')
     const ok = await deleteShift(tenantId, id)

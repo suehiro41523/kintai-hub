@@ -3,7 +3,10 @@ import { createMiddleware } from 'hono/factory'
 import { db } from '../db/index.js'
 import { findUserById } from '../db/queries/users.js'
 import { auth } from '../lib/auth.js'
-import type { AppEnv } from '../types.js'
+import type { AppEnv, Role } from '../types.js'
+
+const isValidRole = (role: string): role is Role =>
+  role === 'admin' || role === 'manager' || role === 'employee'
 
 export const verifySession = createMiddleware<AppEnv>(async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers })
@@ -14,6 +17,10 @@ export const verifySession = createMiddleware<AppEnv>(async (c, next) => {
 
   const coreUser = await findUserById(session.user.id)
   if (!coreUser || !coreUser.isActive) {
+    return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
+  }
+
+  if (!isValidRole(coreUser.role)) {
     return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
   }
 
@@ -32,3 +39,12 @@ export const injectTenantContext = createMiddleware<AppEnv>(async (c, next) => {
   await db.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
   await next()
 })
+
+export const requireRole = (...roles: Role[]) =>
+  createMiddleware<AppEnv>(async (c, next) => {
+    const role = c.get('role')
+    if (!roles.includes(role)) {
+      return c.json({ error: 'Forbidden', code: 'FORBIDDEN' }, 403)
+    }
+    await next()
+  })

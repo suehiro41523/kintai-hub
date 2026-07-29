@@ -13,7 +13,7 @@ import {
 import { authAccount, authUser } from '../../db/schema/auth.js'
 import { users } from '../../db/schema/core.js'
 import { logger } from '../../lib/logger.js'
-import { injectTenantContext, verifySession } from '../../middleware/auth.js'
+import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
 
 const ROLES = ['admin', 'manager', 'employee'] as const
@@ -42,13 +42,13 @@ const UpdateSchema = z
 
 export const usersRouter = new Hono<AppEnv>()
 
-  .get('/', verifySession, injectTenantContext, async (c) => {
+  .get('/', verifySession, injectTenantContext, requireRole('admin'), async (c) => {
     const tenantId = c.get('tenantId')
     const userList = await listUsers(tenantId)
     return c.json({ users: userList })
   })
 
-  .post('/', verifySession, injectTenantContext, zValidator('json', CreateSchema), async (c) => {
+  .post('/', verifySession, injectTenantContext, requireRole('admin'), zValidator('json', CreateSchema), async (c) => {
     const data = c.req.valid('json')
     const tenantId = c.get('tenantId')
 
@@ -112,6 +112,7 @@ export const usersRouter = new Hono<AppEnv>()
     '/:id',
     verifySession,
     injectTenantContext,
+    requireRole('admin'),
     zValidator('json', UpdateSchema),
     async (c) => {
       const id = c.req.param('id')
@@ -126,7 +127,7 @@ export const usersRouter = new Hono<AppEnv>()
     },
   )
 
-  .delete('/:id', verifySession, injectTenantContext, async (c) => {
+  .delete('/:id', verifySession, injectTenantContext, requireRole('admin'), async (c) => {
     const id = c.req.param('id')
     const tenantId = c.get('tenantId')
 

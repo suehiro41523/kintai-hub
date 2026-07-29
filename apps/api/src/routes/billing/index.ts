@@ -12,7 +12,7 @@ import {
   updateBillingContract,
 } from '../../db/queries/billing.js'
 import { logger } from '../../lib/logger.js'
-import { injectTenantContext, verifySession } from '../../middleware/auth.js'
+import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
 
 const ContractCreateSchema = z.object({
@@ -44,7 +44,7 @@ export const billingRouter = new Hono<AppEnv>()
 
   // ─── 契約 ───────────────────────────────────────────────────────────────────
 
-  .get('/contracts', verifySession, injectTenantContext, async (c) => {
+  .get('/contracts', verifySession, injectTenantContext, requireRole('manager', 'admin'), async (c) => {
     const tenantId = c.get('tenantId')
     const contracts = await listBillingContracts(tenantId)
     return c.json({ contracts })
@@ -54,6 +54,7 @@ export const billingRouter = new Hono<AppEnv>()
     '/contracts',
     verifySession,
     injectTenantContext,
+    requireRole('admin'),
     zValidator('json', ContractCreateSchema),
     async (c) => {
       const data = c.req.valid('json')
@@ -64,7 +65,7 @@ export const billingRouter = new Hono<AppEnv>()
     },
   )
 
-  .get('/contracts/:id', verifySession, injectTenantContext, async (c) => {
+  .get('/contracts/:id', verifySession, injectTenantContext, requireRole('manager', 'admin'), async (c) => {
     const id = c.req.param('id')
     const tenantId = c.get('tenantId')
     const contract = await findBillingContract(tenantId, id)
@@ -78,6 +79,7 @@ export const billingRouter = new Hono<AppEnv>()
     '/contracts/:id',
     verifySession,
     injectTenantContext,
+    requireRole('admin'),
     zValidator('json', ContractUpdateSchema),
     async (c) => {
       const id = c.req.param('id')
@@ -92,7 +94,7 @@ export const billingRouter = new Hono<AppEnv>()
     },
   )
 
-  .delete('/contracts/:id', verifySession, injectTenantContext, async (c) => {
+  .delete('/contracts/:id', verifySession, injectTenantContext, requireRole('admin'), async (c) => {
     const id = c.req.param('id')
     const tenantId = c.get('tenantId')
     const result = await deleteBillingContract(tenantId, id)
@@ -111,7 +113,7 @@ export const billingRouter = new Hono<AppEnv>()
 
   // ─── サマリー ────────────────────────────────────────────────────────────────
 
-  .get('/summaries', verifySession, injectTenantContext, async (c) => {
+  .get('/summaries', verifySession, injectTenantContext, requireRole('manager', 'admin'), async (c) => {
     const tenantId = c.get('tenantId')
     const yearStr = c.req.query('year')
     const monthStr = c.req.query('month')
@@ -131,6 +133,7 @@ export const billingRouter = new Hono<AppEnv>()
     '/summaries/calculate',
     verifySession,
     injectTenantContext,
+    requireRole('admin'),
     zValidator('json', CalculateSchema),
     async (c) => {
       const { contractId, year, month } = c.req.valid('json')
@@ -147,7 +150,7 @@ export const billingRouter = new Hono<AppEnv>()
     },
   )
 
-  .post('/summaries/:id/confirm', verifySession, injectTenantContext, async (c) => {
+  .post('/summaries/:id/confirm', verifySession, injectTenantContext, requireRole('admin'), async (c) => {
     const id = c.req.param('id')
     const tenantId = c.get('tenantId')
     const result = await confirmBillingSummary(id)

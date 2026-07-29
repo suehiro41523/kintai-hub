@@ -9,6 +9,7 @@ export const reportsRouter = new Hono<AppEnv>().get(
   injectTenantContext,
   async (c) => {
     const tenantId = c.get('tenantId')
+    const role = c.get('role')
     const yearStr = c.req.query('year')
     const monthStr = c.req.query('month')
 
@@ -28,7 +29,8 @@ export const reportsRouter = new Hono<AppEnv>().get(
       return c.json({ error: 'year/month の値が不正です', code: 'VALIDATION_ERROR' }, 400)
     }
 
-    const report = await getMonthlyReport(tenantId, year, month)
+    const userId = role === 'employee' ? c.get('userId') : undefined
+    const report = await getMonthlyReport(tenantId, year, month, userId)
     return c.json({ report })
   },
 )

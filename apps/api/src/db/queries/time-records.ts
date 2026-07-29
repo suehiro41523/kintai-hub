@@ -21,6 +21,63 @@ function mapRecord(row: TimeRecordRow): MappedTimeRecord {
   }
 }
 
+export async function listTeamRecords(
+  tenantId: string,
+  from: Date,
+  to: Date,
+  userId?: string,
+): Promise<MappedTimeRecord[]> {
+  const rows = await db
+    .select()
+    .from(timeRecords)
+    .where(
+      and(
+        eq(timeRecords.tenantId, tenantId),
+        gte(timeRecords.clockedAt, from),
+        lte(timeRecords.clockedAt, to),
+        userId ? eq(timeRecords.userId, userId) : undefined,
+      ),
+    )
+    .orderBy(asc(timeRecords.userId), asc(timeRecords.clockedAt))
+  return rows.map(mapRecord)
+}
+
+export type PatchTimeRecordData = {
+  clockedAt?: Date
+  workTypeId?: string
+}
+
+export async function patchTimeRecord(
+  tenantId: string,
+  id: string,
+  data: PatchTimeRecordData,
+  modifiedBy: string,
+): Promise<MappedTimeRecord | null> {
+  const [existing] = await db
+    .select()
+    .from(timeRecords)
+    .where(and(eq(timeRecords.id, id), eq(timeRecords.tenantId, tenantId)))
+    .limit(1)
+
+  if (!existing) return null
+
+  const now = new Date()
+  const [updated] = await db
+    .update(timeRecords)
+    .set({
+      ...(data.clockedAt !== undefined && { clockedAt: data.clockedAt }),
+      ...(data.workTypeId !== undefined && { workTypeId: data.workTypeId }),
+      isModified: true,
+      modifiedBy,
+      modifiedAt: now,
+      originalClockedAt: existing.isModified ? existing.originalClockedAt : existing.clockedAt,
+    })
+    .where(and(eq(timeRecords.id, id), eq(timeRecords.tenantId, tenantId)))
+    .returning()
+
+  return mapRecord(updated)
+}
+
 export async function listRecords(
   userId: string,
   tenantId: string,

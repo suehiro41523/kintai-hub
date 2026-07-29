@@ -7,7 +7,7 @@ import {
   updateShiftPattern,
 } from '../../db/queries/shifts.js'
 import { logger } from '../../lib/logger.js'
-import { injectTenantContext, verifySession } from '../../middleware/auth.js'
+import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
 
 const CreateSchema = z.object({
@@ -29,7 +29,7 @@ export const shiftPatternsRouter = new Hono<AppEnv>()
     return c.json({ patterns })
   })
 
-  .post('/', verifySession, injectTenantContext, zValidator('json', CreateSchema), async (c) => {
+  .post('/', verifySession, injectTenantContext, requireRole('admin'), zValidator('json', CreateSchema), async (c) => {
     const data = c.req.valid('json')
     const tenantId = c.get('tenantId')
     const pattern = await createShiftPattern({ tenantId, ...data })
@@ -41,6 +41,7 @@ export const shiftPatternsRouter = new Hono<AppEnv>()
     '/:id',
     verifySession,
     injectTenantContext,
+    requireRole('admin'),
     zValidator('json', UpdateSchema),
     async (c) => {
       const id = c.req.param('id')

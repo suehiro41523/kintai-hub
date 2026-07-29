@@ -9,7 +9,7 @@ import {
   updateWorkType,
 } from '../../db/queries/work-types.js'
 import { logger } from '../../lib/logger.js'
-import { injectTenantContext, verifySession } from '../../middleware/auth.js'
+import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
 
 const CreateSchema = z.object({
@@ -43,7 +43,7 @@ export const workTypesRouter = new Hono<AppEnv>()
     return c.json({ workTypes })
   })
 
-  .post('/', verifySession, injectTenantContext, zValidator('json', CreateSchema), async (c) => {
+  .post('/', verifySession, injectTenantContext, requireRole('admin'), zValidator('json', CreateSchema), async (c) => {
     const data = c.req.valid('json')
     const tenantId = c.get('tenantId')
     const workType = await createWorkType({ tenantId, ...data })
@@ -56,6 +56,7 @@ export const workTypesRouter = new Hono<AppEnv>()
     '/reorder',
     verifySession,
     injectTenantContext,
+    requireRole('admin'),
     zValidator('json', ReorderSchema),
     async (c) => {
       const { orders } = c.req.valid('json')
@@ -70,6 +71,7 @@ export const workTypesRouter = new Hono<AppEnv>()
     '/:id',
     verifySession,
     injectTenantContext,
+    requireRole('admin'),
     zValidator('json', UpdateSchema),
     async (c) => {
       const id = c.req.param('id')
@@ -84,7 +86,7 @@ export const workTypesRouter = new Hono<AppEnv>()
     },
   )
 
-  .delete('/:id', verifySession, injectTenantContext, async (c) => {
+  .delete('/:id', verifySession, injectTenantContext, requireRole('admin'), async (c) => {
     const id = c.req.param('id')
     const tenantId = c.get('tenantId')
     const ok = await deactivateWorkType(tenantId, id)

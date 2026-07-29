@@ -1,8 +1,10 @@
+export type Role = 'admin' | 'manager' | 'employee'
+
 export type AppEnv = {
   Variables: {
     userId: string
     tenantId: string
-    role: string
+    role: Role
   }
 }
 
