@@ -15,7 +15,13 @@
 │   ├── requirements.md         # 要件定義書
 │   ├── tech-selection.md       # 技術選定書
 │   ├── db-design.md            # DB設計書
-│   └── api-spec.md             # API設計書
+│   ├── api-spec.md             # API設計書
+│   ├── permissions.md          # 権限設計書
+│   ├── ui-permissions.md       # UI権限設計書
+│   └── screens/                # 画面設計書（画面単位のUI・遷移・API連携設計）
+│       ├── top-page-design.md      # トップページ
+│       ├── signup-page-design.md   # サインアップページ
+│       └── verify-email-design.md  # メール認証画面
 ├── docker-compose.yml
 ├── package.json                # yarn workspaces 設定
 ├── CLAUDE.md
@@ -39,7 +45,13 @@ docs/
 ├── requirements.md     # 要件定義書（機能要件・非機能要件・差別化機能）
 ├── tech-selection.md   # 技術選定書（技術スタック・Phase1→2移行計画）
 ├── db-design.md        # DB設計書（全14テーブル定義・インデックス・RLS）
-└── api-spec.md         # API設計書（全62エンドポイント仕様）
+├── api-spec.md         # API設計書（全62エンドポイント仕様）
+├── permissions.md      # 権限設計書（ロール×操作の権限マトリクス）
+├── ui-permissions.md   # UI権限設計書（ロール別の画面・UI要素の表示制御）
+└── screens/            # 画面設計書（画面単位のレイアウト・状態・API連携）
+    ├── top-page-design.md      # トップページ（LP・訴求構成）
+    ├── signup-page-design.md   # サインアップページ（/signup）
+    └── verify-email-design.md  # メール認証画面（/verify-email）
 ```
 
 ---
