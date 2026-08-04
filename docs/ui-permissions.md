@@ -20,6 +20,13 @@
 
 ダッシュボード全体（`/(dashboard)` 配下）は `layout.tsx` で `useMe()` のエラーを検知し、`/login` へリダイレクト。
 
+## 未確認（メール未認証）ユーザーの挙動
+
+ダッシュボード全体（`/(dashboard)` 配下）は `layout.tsx` で `useMe()`（`GET /auth/session`）の `user.emailVerified` を確認する。`false` の場合は `/login` 等へリダイレクトせず、サイドバー・ページ内容を描画する代わりに「メールアドレスが未確認です」というブロッキングメッセージ画面を表示する。
+
+- リダイレクトしない理由：ユーザーは既にログイン済み（Cookieセッションあり）のため、未認証扱いにする必要はない
+- メッセージ画面には確認メールの再送信導線（`POST /auth/send-verification-email`）を設置する。詳細は [screens/verify-email-design.md](./screens/verify-email-design.md) を参照
+
 ---
 
 ## ページアクセス制御

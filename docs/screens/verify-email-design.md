@@ -9,9 +9,10 @@
 
 - [signup-page-design.md 8章](./signup-page-design.md#8-関連画面メール認証待ちverify-email)で「詳細設計は別途」としていた画面の本設計。
 - 本画面は **2つの異なる文脈** で同一パスに表示される、1つのReactページ（`apps/web/src/app/verify-email/page.tsx`）とする。
-  - **パターンA（待機）**：`/signup` 完了直後の遷移先。トークン無し。「メールを送ったので確認してください」の待機画面。
-  - **パターンB（検証）**：メール本文中のリンク（`/verify-email?token=...`）を踏んだ際の遷移先。トークン有り。検証結果（成功／失敗）を表示する。
+  - **パターンA（待機）**：`/signup` 完了直後の遷移先。URLクエリ無し。「メールを送ったので確認してください」の待機画面。
+  - **パターンB（結果表示）**：メール本文中のリンク（Better Authがサーバー側で検証した後にリダイレクトしてくる先）としての着地。フロントはtokenを受け取らず、`error`クエリの有無・値と `GET /auth/session` の結果から成功／失敗を表示する。
 - 認証方式は [AUTH-DESIGN.md](../../AUTH-DESIGN.md) の通り Better Auth（セルフホスト）+ Cookieセッション。サインアップ完了時点（`POST /auth/sign-up`）で既に `session_token` が発行されCookieがセットされている＝**ユーザーは未認証ではなく「メール未確認のログイン中ユーザー」**という状態になる点が設計上の前提。
+- **メール確認方式は Better Auth 標準機能に委譲する（確定）。** カスタムの検証APIはアプリ側（`/api/v1/...`）に実装しない。トークンはBetter Auth標準ルート（`GET /auth/verify-email`）がAPIサーバー側で直接検証し、結果に応じて `callbackURL` へリダイレクトする。**フロントの `/verify-email` ページは token を一度も受け取らない**（メール本文中のリンクはNext.jsではなくAPIサーバーを直接指す）。詳細は5章。
 
 ---
 
@@ -30,21 +31,26 @@
 ```
 [/signup] 送信成功
    ↓ router.replace('/verify-email')
-[/verify-email]（パターンA：待機）
-   - セッションから email を取得して表示
+[/verify-email]（パターンA：待機。errorクエリ無し・emailVerified=false）
+   - GET /auth/session から email・emailVerified を取得
    - 「確認メールを送信しました」
-   - [確認メールを再送信] ボタン
+   - [確認メールを再送信] ボタン → POST /auth/send-verification-email
    ↓（別タブ／別デバイスでメールを開きリンクをクリック）
-[/verify-email?token=xxxx]（パターンB：検証）
-   - マウント時に自動でトークン検証APIを呼ぶ
-   - 検証中 → 成功 → [ダッシュボードへ進む] ボタン（or 自動遷移）→ /clock
-   - 検証中 → 失敗（期限切れ／不正トークン／既に確認済み）→ エラー表示 + 再送信導線
+メール内リンクはNext.jsの/verify-emailではなく、APIサーバーのBetter Auth標準ルートを直接指す
+   例: {API_URL}/api/v1/auth/verify-email?token=...&callbackURL={WEB_URL}/verify-email
+   ↓
+Better Authがサーバー側でトークンを検証（フロントはこの時点では何も呼ばれていない）
+   - 成功 or 既に確認済み → callbackURLへリダイレクト（クエリ付与なし）
+   - 失敗 → callbackURL?error=TOKEN_EXPIRED / INVALID_TOKEN / USER_NOT_FOUND へリダイレクト
+   ↓
+[/verify-email]（パターンB：結果表示。ブラウザがリダイレクトで着地した状態）
+   - errorクエリあり → 対応するエラー状態を表示
+   - errorクエリなし → GET /auth/session で emailVerified を確認 → true なら成功表示 → [ダッシュボードへ進む] → /clock
 ```
 
-**パターンAの画面を開いたままリンクをクリックした場合**（同一タブ運用）：`useSearchParams` の `token` の有無で表示を出し分けるため、ページ遷移（クエリ付与）と同時にパターンBの表示へ自動的に切り替わる。
+**パターンAの画面を開いたままリンクをクリックした場合**（同一タブ運用）：リンク自体がAPIサーバーを指しているため、クリックした瞬間にNext.jsのページからは離脱し、Better Authの検証・リダイレクトを経て再び `/verify-email` に戻ってくる（＝パターンAとパターンBは同一URLへの「行って戻ってくる」遷移であり、フロント側でtokenを見て表示を切り替えるという分岐は不要）。
 
-**別タブでリンクを開いた場合**（一般的な運用）：パターンAのタブは自動では気づけないため、以下のいずれかで解決する（10章「今後の検討事項」参照）。
-- パターンAの画面で数秒間隔のポーリング、または画面フォーカス復帰時に `GET /auth/session` を再取得し、確認済みなら自動的に `/clock` へリダイレクト
+**別タブでリンクを開いた場合**（一般的な運用、確定仕様）：パターンAのタブは `visibilitychange`/`focus` イベントを監視し、タブがフォアグラウンドに復帰した瞬間に `GET /auth/session` を再取得する。`emailVerified: true` になっていれば自動的に `/clock` へリダイレクトする。メール内リンクをクリックした後に元のタブへ戻る操作を必ず伴うため、ポーリングは実装しない（API呼び出しを最小限に保つため）。
 
 ---
 
@@ -81,15 +87,15 @@
 └─────────────────────────────────────┘
 ```
 
-### 3.2 パターンB（検証）
+### 3.2 パターンB（結果表示）
 
-検証中・成功・失敗で中央のアイコン／見出し／本文／ボタンのみ差し替える（カード枠は共通）。
+トークン検証自体はBetter Authが着地前に完了させているため、フロントの「検証中」はページマウント直後の `GET /auth/session` 確認（一瞬）のみ。状態に応じて中央のアイコン／見出し／本文／ボタンを差し替える（カード枠は共通）。
 
 ```
 ┌─────────────────────────────┐
 │      ⏳ / ✅ / ⚠️              │ ← 状態に応じたアイコン
 │                               │
-│  確認しています…              │ ← 検証中の見出し
+│  確認しています…              │ ← セッション確認中（一瞬）
 │  （or メール認証が完了しました） │ ← 成功
 │  （or リンクの有効期限が切れて   │ ← 失敗
 │   います）                    │
@@ -105,60 +111,75 @@
 
 | 状態 | 発生条件 | 表示 | ボタン |
 |---|---|---|---|
-| `waiting`（待機） | パターンA、初期表示 | 3.1のレイアウト | 「確認メールを再送信」 |
+| `checking`（確認中） | マウント直後、`GET /auth/session` 応答待ちの一瞬 | スピナー＋「確認しています…」 | なし |
+| `waiting`（待機） | `error`クエリ無し ＋ `session.user.emailVerified === false` | 3.1のレイアウト | 「確認メールを再送信」 |
 | `resending` | 再送信ボタン押下中 | ボタンを「送信中...」+ disabled | — |
 | `resent` | 再送信成功 | ボタン下に「再送信しました」（`text-green-600`、数秒でフェードアウト or 常時表示） | 「確認メールを再送信」（再度押下可、7章のレート制限に従う） |
-| `verifying`（検証中） | パターンB、マウント直後 | スピナー＋「確認しています…」 | なし |
-| `verified`（成功） | 検証API成功 | ✅＋「メール認証が完了しました」 | 「ダッシュボードへ進む」（`/clock`） |
-| `expired`（期限切れ） | 検証API失敗（トークン期限切れ） | ⚠️＋「リンクの有効期限が切れています」 | 「確認メールを再送信」 |
-| `invalid`（不正トークン） | 検証API失敗（トークン不正・存在しない） | ⚠️＋「無効なリンクです」 | 「ログイン画面へ」（`/login`） |
-| `already_verified`（確認済み） | 検証API失敗（既に確認済み） | ✅＋「既に認証済みです」 | 「ダッシュボードへ進む」（`/clock`） |
+| `verified`（成功） | `error`クエリ無し ＋ `session.user.emailVerified === true`（Better Auth側で「新規に確認」「既に確認済み」のどちらだったかは判別しない。同じ表示に統合） | ✅＋「メール認証が完了しました」 | 「ダッシュボードへ進む」（`/clock`） |
+| `expired`（期限切れ） | `?error=TOKEN_EXPIRED` | ⚠️＋「リンクの有効期限が切れています」 | 「確認メールを再送信」 |
+| `invalid`（不正トークン） | `?error=INVALID_TOKEN` または `?error=USER_NOT_FOUND` | ⚠️＋「無効なリンクです」 | 「ログイン画面へ」（`/login`） |
+
+`already_verified` は独立した状態にしない：Better Auth標準ルートは「新規に確認できた場合」と「既に確認済みだった場合」のどちらも `callbackURL` へエラー無しでリダイレクトするため、フロント側では区別できず・区別する必要もない（`verified`状態に統合）。
 
 ---
 
 ## 5. API連携
 
-現時点の `api-spec.md` 1章（認証API）には **メール確認専用のエンドポイントが未定義** のため、本書で以下を提案する。実装時は `api-spec.md` への追記が必要。
+メール確認はBetter Auth標準機能に委譲する（確定）。カスタムAPIは実装せず、Better Authが標準で提供する以下2エンドポイントをそのまま使う（`api-spec.md` 1章に追記済み）。
 
-| # | メソッド | エンドポイント | 概要 | リクエスト | レスポンス | エラー |
-|---|---|---|---|---|---|---|
-| 提案1 | POST | `/auth/send-verification-email` | 確認メール再送信 | なし（Cookieセッションから対象ユーザーを特定） | `{ success: true }` | 401 / 429（レート制限） |
-| 提案2 | POST | `/auth/verify-email` | トークン検証・確認確定 | `token` | `{ success: true, user }` | 400（不正） / 410（期限切れ） / 409（確認済み） |
+| メソッド | エンドポイント | 概要 | フロントの呼び方 |
+|---|---|---|---|
+| GET | `/auth/verify-email` | トークン検証。成功/既確認は `callbackURL` へ無印リダイレクト、失敗は `callbackURL?error=CODE` へリダイレクト | フロントからは呼ばない。メール本文のリンク先として使うのみ |
+| POST | `/auth/send-verification-email` | 確認メール送信・再送信。body: `email`, `callbackURL?` | 再送信ボタンから呼ぶ |
 
-**実装方針の論点（要すり合わせ）**：Better Authはメール確認機能を標準搭載しており、`auth.api.sendVerificationEmail` / Better Auth側の `verify-email` ハンドラー（`callbackURL` 指定でサーバー側リダイレクト）をそのまま使う選択肢もある。その場合、パターンBの検証処理はフロントの `/verify-email` ページではなく **Better Authのエンドポイントが直接処理してから `/verify-email?verified=true` のような結果状態のみを付けてリダイレクトする** 形になり、上記「提案2」は不要になる。どちらの方式を採るかはAPI実装時に決定し、決定後に本書と `api-spec.md` を更新する。
+パターンAでの表示メールアドレス・確認状態の取得は新規APIを使わず、既存の `GET /auth/session`（`api-spec.md` 認証API #4）のレスポンス（`user.email`, `user.emailVerified`）を利用する。
 
-パターンAでの表示メールアドレス取得は新規APIを使わず、既存の `GET /auth/session`（`api-spec.md` 認証API #4）のレスポンスから `user.email` を利用する。
+**実装上の前提設定（Better Auth側）**
+
+- `emailVerification.sendVerificationEmail` に Resend連携の送信処理を実装しないと `send-verification-email` は `400 VERIFICATION_EMAIL_NOT_ENABLED` を返す（必須設定）。
+- トークン有効期限のデフォルトは1時間（3600秒）。4章決定の「24時間」を満たすには `emailVerification.expiresIn: 86400` の明示設定が必要（デフォルトのままでは要件を満たさない点に注意）。
+- `POST /auth/send-verification-email` は既にログイン中（Cookieセッションあり）かつ `session.user.emailVerified === true` の場合 `400 EMAIL_ALREADY_VERIFIED` を返す。再送信ボタン押下時にこのエラーを受けたら「既に認証済みです」表示へ切り替え、`/clock` への導線を出す。
 
 ---
 
 ## 6. 送信・検証フロー
 
-### パターンA：再送信
+### パターンA：初期表示・再送信
 
 ```
+ページマウント（URLにerrorクエリ無し）
+   ↓
+状態を checking に設定
+   ↓
+GET /auth/session
+   ↓（emailVerified: true）verified に遷移 → 2〜3秒後 /clock へ自動リダイレクト（+ 手動ボタンも表示）
+   ↓（emailVerified: false）waiting に遷移、email をセッションから表示
+
 「確認メールを再送信」クリック
    ↓
 ボタンを「送信中...」+ disabled
    ↓
-POST /auth/send-verification-email
+POST /auth/send-verification-email { email, callbackURL: `${WEB_URL}/verify-email` }
    ↓（成功）「再送信しました」表示、7章のクールダウン開始
+   ↓（400 EMAIL_ALREADY_VERIFIED）verified に遷移（他タブ等で確認済みになっていた場合）
    ↓（429）「しばらくしてから再度お試しください」+ 次回送信可能までの残り時間表示
 ```
 
-### パターンB：検証
+### パターンB：メールリンク経由での着地
 
 ```
-ページマウント
+メール内リンククリック（ブラウザはAPIサーバーのBetter Authルートへ遷移。Next.jsページはまだ開始していない）
    ↓
-URLの token パラメータを取得
+Better Authがサーバー側でトークン検証
+   ↓（成功 or 既に確認済み）/verify-email へリダイレクト（クエリ無し）
+   ↓（失敗）/verify-email?error=TOKEN_EXPIRED|INVALID_TOKEN|USER_NOT_FOUND へリダイレクト
    ↓
-状態を verifying に設定
-   ↓
-POST /auth/verify-email { token }
-   ↓（成功）verified に遷移 → 2〜3秒後 /clock へ自動リダイレクト（+ 手動ボタンも表示）
-   ↓（410 期限切れ）expired に遷移
-   ↓（409 確認済み）already_verified に遷移
-   ↓（400 不正）invalid に遷移
+Next.jsの/verify-emailページがマウント
+   ↓（errorクエリあり）
+      TOKEN_EXPIRED → expired に遷移
+      INVALID_TOKEN / USER_NOT_FOUND → invalid に遷移
+   ↓（errorクエリなし）
+      上記「パターンA：初期表示」と同じ checking → GET /auth/session の分岐に合流
 ```
 
 ---
@@ -188,7 +209,7 @@ POST /auth/verify-email { token }
 
 ## 9. アクセシビリティ・その他
 
-- 検証中（`verifying`）のスピナーには `aria-live="polite"` を付与し、状態変化がスクリーンリーダーに伝わるようにする
+- 確認中（`checking`）のスピナーには `aria-live="polite"` を付与し、状態変化がスクリーンリーダーに伝わるようにする
 - 再送信のクールダウン残り秒数はボタンの `aria-label` にも反映（視覚的な秒数表示だけに依存しない）
 - メールアドレスの表示は正しく取得できなかった場合（セッション取得失敗等）に空表示にならないよう、フォールバック文言「ご登録のメールアドレス宛に」を用意する
 
@@ -196,8 +217,48 @@ POST /auth/verify-email { token }
 
 ## 10. 今後の検討事項（未確定）
 
-- メール確認をBetter Auth標準機能に委譲するか、カスタムAPI（5章 提案1・2）を実装するかの最終決定
-- 別タブでリンクを開いた場合の待機タブ（パターンA）の自動更新方式（ポーリング／フォーカス時再取得のどちらにするか）
-- メール確認が未完了のユーザーが `/clock` 等へ直接アクセスした場合のガード方針（`(dashboard)` の `layout.tsx` でのリダイレクト要否。[ui-permissions.md](../ui-permissions.md)の「未認証ユーザーの挙動」と同様に「未確認ユーザーの挙動」として追記が必要）
-- 確認メール自体の文面・送信元設定（Resend連携）
-- トークンの有効期限（提案：24時間、要確定）
+- 確認メール自体の文面・送信元設定（Resend連携）：11章に草案を作成済みだが、送信元ドメイン・法務文言・最終コピーは未承認
+
+**決定済み（このドキュメント外にも反映）**
+
+- メール確認方式：Better Auth標準機能に委譲（0章・5章に反映）
+- トークン有効期限：24時間（`emailVerification.expiresIn: 86400` の明示設定が必要。5章に反映）
+- メール確認未完了ユーザーが `/clock` 等へアクセスした場合のガード方針：「メールが未確認です」というブロッキングメッセージを表示する。詳細は [ui-permissions.md](../ui-permissions.md) の「未確認（メール未認証）ユーザーの挙動」を参照
+- 別タブでリンクを開いた場合の待機タブ（パターンA）の自動更新方式：フォーカス時再取得のみ（`visibilitychange`/`focus`イベント）。ポーリングは実装しない（2章に反映）
+
+---
+
+## 11. 確認メール文面（草案・未承認）
+
+送信元ドメイン・法務文言・最終コピーは未確定のため、実装着手前に要承認。`emailVerification.sendVerificationEmail`（Resend連携）に渡す内容の草案として以下を提案する。
+
+| 項目 | 値（草案） |
+|---|---|
+| 送信元表示名 | KintaiHub |
+| 送信元アドレス | `no-reply@（送信ドメイン未確定）` |
+| 件名 | 【KintaiHub】メールアドレスの確認をお願いします |
+
+**本文（草案）**
+
+```
+{{name}} 様
+
+KintaiHubにご登録いただきありがとうございます。
+以下のリンクをクリックして、メールアドレスの確認を完了してください。
+
+{{verificationUrl}}
+
+※このリンクの有効期限は24時間です。期限が切れた場合は、
+　サインアップ画面またはログイン後の画面から再送信してください。
+
+※このメールにお心当たりがない場合は、破棄していただいて構いません。
+　お客様のメールアドレスが誤って入力された可能性があります。
+
+--
+KintaiHub
+（フッター：会社情報・配信停止に関する記載は要法務確認。9〜10章の法務コンテンツ整備待ち）
+```
+
+- `{{verificationUrl}}` は Better Auth が生成する `GET /auth/verify-email?token=...&callbackURL=...` のフルURL
+- HTML版のデザイン（ロゴ・ボタン化されたリンク等）は本草案では未定義。まずプレーンテキスト相当の内容で実装し、デザイン適用は別途
+- 送信元ドメインはResendでのドメイン認証（SPF/DKIM）が必要。ドメイン未確定のため実装時はResendのテストドメインで仮運用し、確定後に切り替える

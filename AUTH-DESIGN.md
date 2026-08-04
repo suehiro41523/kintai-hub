@@ -36,6 +36,25 @@ POST /auth/sign-in
   → ハンドラー実行
 ```
 
+## サインアップフロー（テナント新規作成）
+
+`POST /auth/sign-up` は `core.tenants`（テナント作成）と `core.users` + `auth.user`/`auth.account`（管理者ユーザー作成）という複数テーブルへの書き込みを伴うため、Better Authの標準 `signUpEmail` には委譲せず、`apps/api/src/routes/auth/sign-up.ts` に自前のハンドラーを実装する（`apps/api/src/routes/users/index.ts` の招待フロー実装と同じパターン）。
+
+```
+POST /auth/sign-up { company_name, name, email, password, plan }
+  → Zodスキーマでバリデーション（role等は受け付けない。DTOに存在しないため構造的に無視される）
+  → hashPassword（better-auth/crypto）
+  → db.transaction:
+      1. core.tenants へ INSERT（company_name, plan）
+      2. auth.user へ INSERT（emailVerified: false）
+      3. auth.account へ INSERT（providerId: 'credential', 生成したpasswordハッシュ）
+      4. core.users へ INSERT（tenantId, role: 'admin' を常にハードコード、リクエストのroleは参照しない）
+  → Better Auth のセッション発行ユーティリティで session_token を生成 + Set-Cookie
+  → { user, tenant, session_token } を返す
+```
+
+`role='admin'` はハンドラー内でハードコードするため、クライアントが `role` を含めて送信しても到達せず無視される。トランザクション制御・パスワードハッシュ化以外の責務（メール確認トークン発行等）はBetter Auth標準機能（`emailVerification`）にそのまま委譲する。
+
 ## RLSポリシー
 
 appスキーマの全テーブルに以下のポリシーが設定されています。

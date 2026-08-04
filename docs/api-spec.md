@@ -34,7 +34,7 @@
 
 | ドメイン | EP数 | 主な機能 | 最小ロール |
 |---|---|---|---|
-| 認証 | 8 | サインイン・アウト・MFA・パスワードリセット | 全員 |
+| 認証 | 10 | サインイン・アウト・MFA・パスワードリセット・メール確認 | 全員 |
 | テナント・ユーザー | 13 | テナント設定・ユーザーCRUD・部署管理 | admin |
 | ワークタイプ | 5 | 種別定義・並び替え・無効化 ★差別化機能 | admin |
 | 打刻 | 11 | 出退勤・休憩・種別切替・修正・月次集計 ★差別化機能の核心 | employee |
@@ -57,6 +57,10 @@
 | 6 | POST | /auth/reset-password | パスワードリセット実行 | all | token, newPassword | { success: true } | 400 / 410 | 不要 |
 | 7 | POST | /auth/two-factor/enable | MFA有効化 | all | password | { totpUri, backupCodes } | 401 | 必須 |
 | 8 | POST | /auth/two-factor/verify | MFAコード検証 | all | code | { success: true } + Set-Cookie | 400 / 410 | 必須 |
+| 9 | GET | /auth/verify-email | メール確認（Better Auth標準機能） | all | token, callbackURL? | 成功/既確認: callbackURLへリダイレクト（クエリ無し） | 失敗: `callbackURL?error=TOKEN_EXPIRED\|INVALID_TOKEN\|USER_NOT_FOUND`へリダイレクト | 不要 |
+| 10 | POST | /auth/send-verification-email | 確認メール送信・再送信（Better Auth標準機能） | all | email, callbackURL? | { status: true } | 400 EMAIL_ALREADY_VERIFIED | 不要（Cookieセッションがあれば本人のメールと照合） |
+
+トークン有効期限は24時間（Better Authデフォルトの1時間から `emailVerification.expiresIn: 86400` へ変更）。詳細: [screens/verify-email-design.md](./screens/verify-email-design.md)
 
 ---
 
