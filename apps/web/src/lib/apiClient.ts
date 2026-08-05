@@ -143,6 +143,15 @@ export interface AuthUser {
   name: string
   email: string
   role: UserRole
+  emailVerified: boolean
+}
+
+export interface Tenant {
+  id: string
+  name: string
+  plan: string
+  status: string
+  maxUsers: number | null
 }
 
 export interface ShiftPattern {
@@ -187,11 +196,17 @@ export interface Request {
 
 // ─── エラークラス ──────────────────────────────────────────────────────────────
 
+export interface ApiErrorDetail {
+  field: string
+  message: string
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
     public readonly code?: string,
+    public readonly details?: ApiErrorDetail[],
   ) {
     super(message)
     this.name = 'ApiError'
@@ -212,8 +227,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
-    throw new ApiError(res.status, body.error ?? 'エラーが発生しました', body.code)
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string
+      code?: string
+      details?: ApiErrorDetail[]
+    }
+    throw new ApiError(res.status, body.error ?? 'エラーが発生しました', body.code, body.details)
   }
 
   return res.json() as Promise<T>
@@ -229,9 +248,27 @@ export const api = {
         body: JSON.stringify({ email, password }),
       }),
 
+    signUp: (data: {
+      company_name: string
+      name: string
+      email: string
+      password: string
+      plan: 'free'
+    }) =>
+      request<{ user: AuthUser; tenant: Tenant }>('/auth/sign-up', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
     signOut: () => request<{ success: boolean }>('/auth/sign-out', { method: 'POST' }),
 
     me: () => request<{ user: AuthUser }>('/auth/me'),
+
+    resendVerificationEmail: (email: string, callbackURL: string) =>
+      request<{ status: boolean }>('/auth/send-verification-email', {
+        method: 'POST',
+        body: JSON.stringify({ email, callbackURL }),
+      }),
   },
 
   workTypes: {

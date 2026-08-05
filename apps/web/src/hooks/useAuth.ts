@@ -27,6 +27,23 @@ export function useSignIn() {
   })
 }
 
+export function useSignUp() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      company_name: string
+      name: string
+      email: string
+      password: string
+      plan: 'free'
+    }) => api.auth.signUp(data),
+    onSuccess: (data) => {
+      qc.clear()
+      qc.setQueryData(ME_KEY, data.user)
+    },
+  })
+}
+
 export function useSignOut() {
   const qc = useQueryClient()
   const router = useRouter()

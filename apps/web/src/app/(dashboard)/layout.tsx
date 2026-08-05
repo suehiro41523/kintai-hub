@@ -1,13 +1,14 @@
 'use client'
 
-import { Clock, Menu, X } from 'lucide-react'
+import { Clock, Mail, Menu, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { ResendVerificationButton } from '@/components/ResendVerificationButton'
 import { useMe } from '@/hooks/useAuth'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { data: user, isLoading, isError } = useMe()
+  const { data: user, isLoading, isError, refetch } = useMe()
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const handleMobileMenuClose = useCallback(() => setIsMobileMenuOpen(false), [])
@@ -27,6 +28,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (!user) return null
+
+  if (!user.emailVerified) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-slate-200 p-6 text-center">
+          <Mail className="h-8 w-8 text-blue-600 mx-auto mb-3" />
+          <h1 className="text-lg font-semibold text-slate-800 mb-2">メールアドレスが未確認です</h1>
+          <p className="text-sm text-slate-600 mb-4">
+            {user.email} 宛に送信された確認メール内のリンクをクリックして、認証を完了してください。
+          </p>
+          <ResendVerificationButton email={user.email} onAlreadyVerified={() => refetch()} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen bg-slate-50">
