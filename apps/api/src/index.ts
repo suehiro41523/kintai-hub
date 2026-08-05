@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { auth } from './lib/auth.js'
 import { logger } from './lib/logger.js'
+import { rateLimit } from './middleware/rate-limit.js'
 import { requestLogger } from './middleware/request-logger.js'
 import { authRouter } from './routes/auth/index.js'
 import { billingRouter } from './routes/billing/index.js'
@@ -28,6 +29,9 @@ app.use(
   }),
 )
 app.use('*', requestLogger)
+
+// Better Authネイティブの確認メール再送信エンドポイントにもBot対策のレート制限を適用する
+app.use('/auth/send-verification-email', rateLimit)
 
 // /auth/me はカスタムハンドラー（core.users の tenantId/role を返す）
 app.route('/auth', authRouter)
