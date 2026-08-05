@@ -1,6 +1,7 @@
 {
   "private": true,
   "name": "kintai-hub",
+  "packageManager": "yarn@4.15.0",
   "workspaces": [
     "apps/*",
     "packages/*"
