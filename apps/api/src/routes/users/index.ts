@@ -13,6 +13,7 @@ import {
 import { authAccount, authUser } from '../../db/schema/auth.js'
 import { users } from '../../db/schema/core.js'
 import { logger } from '../../lib/logger.js'
+import { passwordSchema } from '../../lib/password.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
 
@@ -26,7 +27,7 @@ const CreateSchema = z.object({
   employmentType: z.enum(EMPLOYMENT_TYPES),
   hourlyRate: z.number().nonnegative().nullable().optional(),
   monthlySalary: z.number().nonnegative().nullable().optional(),
-  initialPassword: z.string().min(8),
+  initialPassword: passwordSchema,
 })
 
 const UpdateSchema = z
