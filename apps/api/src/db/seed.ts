@@ -108,7 +108,7 @@ await db.transaction(async (tx) => {
       id: ADMIN_USER_ID,
       name: '管理者',
       email: ADMIN_EMAIL,
-      emailVerified: false,
+      emailVerified: true,
       createdAt: now,
       updatedAt: now,
     })
