@@ -37,12 +37,16 @@ export function ResendVerificationButton({
     } catch (err) {
       if (err instanceof ApiError && err.code === 'EMAIL_ALREADY_VERIFIED') {
         onAlreadyVerified?.()
-      } else if (err instanceof ApiError && err.status === 429) {
-        setError('しばらくしてから再度お試しください')
+        setState('idle')
       } else {
-        setError('送信に失敗しました。時間をおいて再度お試しください')
+        if (err instanceof ApiError && err.status === 429) {
+          setError('しばらくしてから再度お試しください')
+        } else {
+          setError('送信に失敗しました。時間をおいて再度お試しください')
+        }
+        setState('idle')
+        setCooldown(COOLDOWN_SECONDS)
       }
-      setState('idle')
     }
   }, [email, cooldown, callbackPath, onAlreadyVerified])
 
