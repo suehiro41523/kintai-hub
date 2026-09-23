@@ -12,8 +12,10 @@ import { reportsRouter } from './routes/reports/index.js'
 import { requestsRouter } from './routes/requests/index.js'
 import { shiftPatternsRouter } from './routes/shift-patterns/index.js'
 import { shiftsRouter } from './routes/shifts/index.js'
+import { subscriptionRouter } from './routes/subscription/index.js'
 import { timeRecordsRouter } from './routes/time-records/index.js'
 import { usersRouter } from './routes/users/index.js'
+import { stripeWebhookRouter } from './routes/webhooks/stripe.js'
 import { workTypesRouter } from './routes/work-types/index.js'
 import type { AppEnv } from './types.js'
 
@@ -46,6 +48,9 @@ app.route('/users', usersRouter)
 app.route('/requests', requestsRouter)
 app.route('/shift-patterns', shiftPatternsRouter)
 app.route('/shifts', shiftsRouter)
+app.route('/subscription', subscriptionRouter)
+// StripeからのWebhookはセッション非経由。生ボディで署名検証するため他ルートと分離している
+app.route('/webhooks', stripeWebhookRouter)
 
 app.get('/health', (c) => c.json({ ok: true }))
 

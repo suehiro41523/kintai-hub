@@ -174,3 +174,19 @@
 | 5 | GET | /notifications | 通知一覧取得 | all | ?unreadOnly=true&page&limit | { notifications, unreadCount } | 401 | 必須 |
 | 6 | POST | /notifications/:id/read | 通知既読 | all | なし | { success: true } | 404 | 必須 |
 | 7 | POST | /notifications/read-all | 全通知既読 | all | なし | { count } | 401 | 必須 |
+
+---
+
+## 9. サブスクリプション・課金 API（2026-09-22追加）
+
+Stripe Checkout + Customer Portalによる自社SaaS課金。§7の「精算・請求 API」（客先への請求計算）とは別物なので注意。詳細: [TECH-STACK.md](../TECH-STACK.md)
+
+| # | メソッド | エンドポイント | 概要 | ロール | リクエスト | レスポンス | エラー | 認証 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | GET | /subscription | 現在のプラン・契約状況取得 | admin, manager | なし | { subscription: { plan, status, currentPeriodEnd, billedSeats, hasStripeCustomer } } | 401/403 | 必須 |
+| 2 | POST | /subscription/checkout | Stripe Checkoutセッション作成（プラン加入・変更） | admin | plan（standard\|pro）, seats | { url } | 400 / 500 PLAN_UNAVAILABLE | 必須 |
+| 3 | POST | /subscription/portal | Stripe Customer Portalセッション作成 | admin | なし | { url } | 400 NO_SUBSCRIPTION | 必須 |
+| 4 | PATCH | /subscription/seats | 契約人数の手動更新 | admin | seats | { success: true, billedSeats } | 400 NO_SUBSCRIPTION | 必須 |
+| 5 | POST | /webhooks/stripe | Stripe Webhook受信（署名検証） | - | Stripe Event（生ボディ） | { received: true } | 400 signature invalid | Stripe署名のみ（セッション認証なし） |
+
+Enterpriseプランは個別見積もりのためStripeを経由せず、スーパー管理者が `core.tenants.plan` を手動で `enterprise` に設定する運用（Checkout API・Webhookの対象外）。

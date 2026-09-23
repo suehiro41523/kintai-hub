@@ -45,10 +45,18 @@
 | plan | VARCHAR(50) | | NOT NULL | 契約プラン（free / standard / pro / enterprise） |
 | status | VARCHAR(50) | | NOT NULL | ステータス（active / suspended / cancelled） |
 | max_users | INTEGER | | NULL | プランの最大ユーザー数 |
+| stripe_customer_id | VARCHAR(255) | | NULL | Stripe Customer ID（2026-09-22追加。Checkout初回通過時に発行） |
+| stripe_subscription_id | VARCHAR(255) | | NULL | Stripe Subscription ID |
+| stripe_price_id | VARCHAR(255) | | NULL | 現在契約中のStripe Price ID |
+| subscription_status | VARCHAR(50) | | NULL | Stripeのsubscription.statusをそのまま保持（active / trialing / past_due / canceled / unpaid 等） |
+| current_period_end | TIMESTAMPTZ | | NULL | 現在の請求期間終了日時 |
+| billed_seats | INTEGER | | NULL | 人数課金プラン（standard/pro）の契約人数。管理画面から手動調整 |
 | created_at | TIMESTAMPTZ | | NOT NULL | 作成日時 |
 | updated_at | TIMESTAMPTZ | | NOT NULL | 更新日時 |
 
-インデックス: `idx_tenants_status`(status), `idx_tenants_plan`(plan)
+インデックス: `idx_tenants_status`(status), `idx_tenants_plan`(plan), `idx_tenants_stripe_customer_id`(stripe_customer_id)
+
+Stripe連携の詳細は [TECH-STACK.md](../TECH-STACK.md) を参照。Enterpriseプランは個別見積もりのためStripeを経由せず、`plan`列をスーパー管理者が手動で設定する運用。
 
 ---
 

@@ -154,6 +154,16 @@ export interface Tenant {
   maxUsers: number | null
 }
 
+export type PaidPlan = 'standard' | 'pro'
+
+export interface Subscription {
+  plan: string
+  status: string | null
+  currentPeriodEnd: string | null
+  billedSeats: number | null
+  hasStripeCustomer: boolean
+}
+
 export interface ShiftPattern {
   id: string
   tenantId: string
@@ -412,6 +422,24 @@ export const api = {
   reports: {
     monthly: (year: number, month: number) =>
       request<{ report: MonthlyReport }>(`/reports/monthly?year=${year}&month=${month}`),
+  },
+
+  subscription: {
+    get: () => request<{ subscription: Subscription }>('/subscription'),
+
+    checkout: (plan: PaidPlan, seats: number) =>
+      request<{ url: string }>('/subscription/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ plan, seats }),
+      }),
+
+    portal: () => request<{ url: string }>('/subscription/portal', { method: 'POST' }),
+
+    updateSeats: (seats: number) =>
+      request<{ success: boolean; billedSeats: number }>('/subscription/seats', {
+        method: 'PATCH',
+        body: JSON.stringify({ seats }),
+      }),
   },
 
   users: {
