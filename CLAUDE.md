@@ -57,8 +57,8 @@ SES業界向けクラウド型勤怠管理SaaSです。
 ## ローカル開発の起動
 
 ```bash
-yarn install
+npm install
 docker compose up -d      # PostgreSQL + Redis
-yarn workspace api db:migrate
-yarn dev                  # 全アプリ同時起動
+npm run db:migrate -w @kintai/api
+npm run dev               # 全アプリ同時起動
 ```

@@ -13,7 +13,7 @@
 │   └── config/       # ESLint・TypeScript・Tailwindの共通設定
 ├── CLAUDE.md
 ├── ARCHITECTURE.md   # このファイル
-├── package.json      # yarn workspaces 設定
+├── package.json      # npm workspaces 設定
 └── docker-compose.yml
 ```
 
