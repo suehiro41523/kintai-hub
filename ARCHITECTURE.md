@@ -5,8 +5,8 @@
 ```
 /
 ├── apps/
-│   ├── web/          # Next.js 15 フロントエンド（Vercel）
-│   └── api/          # Hono.js バックエンドAPI（Render / App Runner）
+│   ├── web/          # Next.js 15 フロントエンド（Cloudflare Workers）
+│   └── api/          # Hono.js バックエンドAPI（Cloudflare Workers）
 ├── packages/
 │   ├── types/        # Zod スキーマ・TypeScript型定義（フロント・バック共通）
 │   ├── ui/           # shadcn/ui ベースの共通UIコンポーネント

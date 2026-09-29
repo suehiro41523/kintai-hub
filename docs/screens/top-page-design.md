@@ -203,15 +203,15 @@ CTA：このセクション末尾にも「無料で始める」ボタンを再�
    - 会社名（→ core.tenants.name）
    - 管理者氏名（→ core.users.name）
    - 管理者メールアドレス（→ core.users.email）
-   - パスワード（Better Auth経由）
+   - パスワード（Supabase Auth経由）
    ↓ 送信
-バックエンド処理（トランザクション、CODING-RULESルール4準拠）
-   1. core.tenants を1件作成（plan='free', status='active'）
-   2. core.users を1件作成（role='admin', tenant_id=作成したテナントID）
-   3. Better Auth側にcredentials登録
-   4. 確認メール送信（Resend）
-   ↓
-[/verify-email] メール認証待ち画面 → メール内リンク踏了後 → 認証完了
+バックエンド処理（Supabase Admin API呼び出し + トランザクション、詳細は AUTH-DESIGN.md）
+   1. Supabase Admin API でユーザーを作成（email_confirm: false）
+   2. core.tenants を1件作成（plan='free', status='active'）
+   3. core.users を1件作成（role='admin', tenant_id=作成したテナントID, auth_user_id=1で発行されたSupabase user id）
+   4. 確認メール送信（Supabase Auth標準機能。送信元はResend経由のカスタムSMTP設定）
+   ↓（この時点ではセッション未発行）
+[/verify-email] メール認証待ち画面 → メール内リンク踏了後 → 認証完了（詳細は verify-email-design.md）
    ↓
 [/onboarding] 初期設定ウィザード（任意）：ワークタイプ登録の簡易ガイド
    ↓

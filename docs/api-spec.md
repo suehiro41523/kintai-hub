@@ -1,6 +1,8 @@
 # api-spec.md — API設計書
 
-> Base URL: `/api/v1` / 認証: Cookie（Better Auth）/ Content-Type: `application/json`
+> Base URL: `/api/v1` / 認証: Authorization: Bearer（Supabase Auth発行のJWT）/ Content-Type: `application/json`
+>
+> 2026-09-28更新: 認証ライブラリをBetter AuthからSupabase Authに変更（詳細は`AUTH-DESIGN.md`）。サインイン・サインアウト・パスワードリセット・MFA・メール確認は、apps/apiを経由せずフロントエンドがSupabaseクライアントSDKで直接Supabase Authを呼び出す方式に変わったため、以下の表から該当エンドポイントを削除した。apps/api側に残るのは`/auth/sign-up`（テナント作成を伴うため自前実装）と`/auth/me`（tenantId/role取得）のみ。
 
 ---
 
@@ -47,20 +49,25 @@
 
 ## 1. 認証 API
 
+### apps/api側に残るエンドポイント
+
 | # | メソッド | エンドポイント | 概要 | ロール | リクエスト | レスポンス | エラー | 認証 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | POST | /auth/sign-up | 新規テナント登録 | all | name, email, password, company_name, plan | { user, tenant, session_token } | 400 / 409 | 不要 |
-| 2 | POST | /auth/sign-in | ログイン | all | email, password | { user, session } + Set-Cookie | 401 / 429 | 不要 |
-| 3 | POST | /auth/sign-out | ログアウト | all | なし | { success: true } | 401 | 必須 |
-| 4 | GET | /auth/session | セッション確認 | all | なし | { user, session } | 401 | 必須 |
-| 5 | POST | /auth/forgot-password | パスワードリセットメール送信 | all | email | { success: true } | 404 | 不要 |
-| 6 | POST | /auth/reset-password | パスワードリセット実行 | all | token, newPassword | { success: true } | 400 / 410 | 不要 |
-| 7 | POST | /auth/two-factor/enable | MFA有効化 | all | password | { totpUri, backupCodes } | 401 | 必須 |
-| 8 | POST | /auth/two-factor/verify | MFAコード検証 | all | code | { success: true } + Set-Cookie | 400 / 410 | 必須 |
-| 9 | GET | /auth/verify-email | メール確認（Better Auth標準機能） | all | token, callbackURL? | 成功/既確認: callbackURLへリダイレクト（クエリ無し） | 失敗: `callbackURL?error=TOKEN_EXPIRED\|INVALID_TOKEN\|USER_NOT_FOUND`へリダイレクト | 不要 |
-| 10 | POST | /auth/send-verification-email | 確認メール送信・再送信（Better Auth標準機能） | all | email, callbackURL? | { status: true } | 400 EMAIL_ALREADY_VERIFIED | 不要（Cookieセッションがあれば本人のメールと照合） |
+| 1 | POST | /auth/sign-up | 新規テナント登録（Supabase Admin APIでのユーザー作成 + core.tenants/core.users作成を1ハンドラーで実行） | all | name, email, password, company_name, plan | { user, tenant } | 400 / 409 | 不要 |
+| 2 | GET | /auth/me | サインイン後のtenantId/role/isActive取得 | all | なし | { user } | 401 | 必須 |
 
-トークン有効期限は24時間（Better Authデフォルトの1時間から `emailVerification.expiresIn: 86400` へ変更）。詳細: [screens/verify-email-design.md](./screens/verify-email-design.md)
+### フロントエンドがSupabaseクライアントSDKで直接呼び出す操作（apps/apiを経由しない）
+
+| 操作 | Supabase Auth SDK呼び出し | 備考 |
+|---|---|---|
+| ログイン | `supabase.auth.signInWithPassword()` | 成功後、返却された access_token を以後のapps/apiリクエストに`Authorization: Bearer`で付与 |
+| ログアウト | `supabase.auth.signOut()` | — |
+| パスワードリセットメール送信 | `supabase.auth.resetPasswordForEmail()` | — |
+| パスワードリセット実行 | `supabase.auth.updateUser({ password })` | リセットリンク経由のセッションで実行 |
+| MFA有効化・検証 | `supabase.auth.mfa.enroll()` / `supabase.auth.mfa.verify()` | — |
+| メール確認 | Supabase Authのメール確認リンク（PKCE） | Better Auth標準機能とは遷移の仕組みが異なる。画面設計（`screens/verify-email-design.md`）の作り直しが未着手（要フォローアップ、詳細は`AUTH-DESIGN.md`） |
+
+トークン有効期限はSupabase Authのデフォルト（アクセストークン1時間・リフレッシュトークンは無期限で1回使い切り）。詳細: `AUTH-DESIGN.md`
 
 ---
 
