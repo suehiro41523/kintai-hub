@@ -12,8 +12,12 @@ export function getStripe(): Stripe {
       'STRIPE_SECRET_KEY が設定されていません。.env に STRIPE_SECRET_KEY を設定してください。',
     )
   }
-  // APIバージョンは固定しておく。Stripe側の自動更新で挙動が変わるのを防ぐため
-  stripeClient = new Stripe(apiKey, { apiVersion: '2026-08-26.dahlia' })
+  // APIバージョンは固定しておく。Stripe側の自動更新で挙動が変わるのを防ぐため。
+  // httpClientはfetchベースに固定する。デフォルトのNode httpクライアントはCloudflare Workers上で動かないため
+  stripeClient = new Stripe(apiKey, {
+    apiVersion: '2026-08-26.dahlia',
+    httpClient: Stripe.createFetchHttpClient(),
+  })
   return stripeClient
 }
 

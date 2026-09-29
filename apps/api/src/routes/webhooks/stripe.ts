@@ -19,7 +19,9 @@ export const stripeWebhookRouter = new Hono()
     const rawBody = await c.req.text()
     let event: Stripe.Event
     try {
-      event = getStripe().webhooks.constructEvent(rawBody, signature, webhookSecret)
+      // constructEvent(同期版)はNodeのcrypto実装に依存するため、Cloudflare Workersでも動く
+      // Web Crypto API(SubtleCrypto)ベースのconstructEventAsyncを使う(Stripe公式のエッジランタイム向け推奨)
+      event = await getStripe().webhooks.constructEventAsync(rawBody, signature, webhookSecret)
     } catch (err) {
       logger.error({ err }, 'stripe_webhook_signature_invalid')
       return c.json({ error: 'invalid signature', code: 'VALIDATION_ERROR' }, 400)

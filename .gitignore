@@ -16,3 +16,7 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Cloudflare Wrangler
+.wrangler/
+.dev.vars*
