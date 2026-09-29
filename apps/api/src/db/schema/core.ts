@@ -72,6 +72,9 @@ export const users = coreSchema.table(
       .notNull()
       .references(() => tenants.id),
     departmentId: uuid('department_id').references(() => departments.id),
+    // Supabase Auth側(auth.users)のユーザーIDへの参照。認証情報はSupabase側が持つため、
+    // ここはリンクのみ(外部スキーマのため drizzle の references() は使わない)
+    authUserId: uuid('auth_user_id').notNull().unique(),
     name: varchar('name', { length: 100 }).notNull(),
     email: varchar('email', { length: 255 }).notNull().unique(),
     role: varchar('role', { length: 50 }).notNull(),
@@ -86,5 +89,6 @@ export const users = coreSchema.table(
     index('idx_users_tenant_id').on(t.tenantId),
     index('idx_users_email').on(t.email),
     index('idx_users_tenant_role').on(t.tenantId, t.role),
+    index('idx_users_auth_user_id').on(t.authUserId),
   ],
 )

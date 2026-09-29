@@ -3,11 +3,11 @@
 import { AlertTriangle, CheckCircle2, Clock, Mail } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense, useEffect } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { ResendVerificationButton } from '@/components/ResendVerificationButton'
-import { useMe } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabaseClient'
 
-type ViewState = 'checking' | 'waiting' | 'verified' | 'expired' | 'invalid'
+type ViewState = 'waiting' | 'checking' | 'verified' | 'expired' | 'invalid'
 
 export default function VerifyEmailPage() {
   return (
@@ -20,19 +20,29 @@ export default function VerifyEmailPage() {
 function VerifyEmailContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const errorParam = searchParams.get('error')
-  const { data: user, isLoading, refetch } = useMe()
+  const tokenHash = searchParams.get('token_hash')
+  const email = searchParams.get('email')
 
-  const view: ViewState =
-    errorParam === 'TOKEN_EXPIRED'
-      ? 'expired'
-      : errorParam === 'INVALID_TOKEN' || errorParam === 'USER_NOT_FOUND'
-        ? 'invalid'
-        : isLoading
-          ? 'checking'
-          : user?.emailVerified
-            ? 'verified'
-            : 'waiting'
+  const [view, setView] = useState<ViewState>(tokenHash ? 'checking' : 'waiting')
+
+  // パターンB: メールリンク経由の着地。token_hashをverifyOtpで検証する
+  useEffect(() => {
+    if (!tokenHash) return
+    let cancelled = false
+
+    supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' }).then(({ error }) => {
+      if (cancelled) return
+      if (error) {
+        setView(error.code === 'otp_expired' ? 'expired' : 'invalid')
+      } else {
+        setView('verified')
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [tokenHash])
 
   // 検証済みなら数秒後にダッシュボードへ自動遷移
   useEffect(() => {
@@ -40,20 +50,6 @@ function VerifyEmailContent() {
     const t = setTimeout(() => router.replace('/clock'), 2500)
     return () => clearTimeout(t)
   }, [view, router])
-
-  // 別タブでの検証完了を、このタブがフォアグラウンドに復帰したタイミングで検知する
-  useEffect(() => {
-    function handleVisibility() {
-      if (document.visibilityState !== 'visible') return
-      void refetch().then((result) => {
-        if (result.data?.emailVerified) {
-          router.replace('/clock')
-        }
-      })
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [refetch, router])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -76,15 +72,11 @@ function VerifyEmailContent() {
             <>
               <Mail className="h-8 w-8 text-blue-600 mx-auto mb-3" />
               <h1 className="text-lg font-semibold text-slate-800 mb-2">確認メールを送信しました</h1>
-              <p className="text-sm text-slate-600 mb-1">
-                {user?.email ?? 'ご登録のメールアドレス'} 宛に
-              </p>
+              <p className="text-sm text-slate-600 mb-1">{email ?? 'ご登録のメールアドレス'} 宛に</p>
               <p className="text-sm text-slate-600 mb-4">
                 確認リンクを送信しました。メール内のリンクをクリックして登録を完了してください。
               </p>
-              {user?.email && (
-                <ResendVerificationButton email={user.email} onAlreadyVerified={() => refetch()} />
-              )}
+              {email && <ResendVerificationButton email={email} />}
               <p className="text-xs text-slate-400 mt-4">
                 メールが届かない場合は迷惑メールフォルダをご確認いただくか、再送信をお試しください。
               </p>
@@ -111,9 +103,7 @@ function VerifyEmailContent() {
               <h1 className="text-lg font-semibold text-slate-800 mb-4">
                 リンクの有効期限が切れています
               </h1>
-              {user?.email && (
-                <ResendVerificationButton email={user.email} onAlreadyVerified={() => refetch()} />
-              )}
+              {email && <ResendVerificationButton email={email} />}
             </>
           )}
 

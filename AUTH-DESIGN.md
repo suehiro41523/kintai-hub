@@ -36,7 +36,7 @@
      apps/api への各リクエストに Authorization: Bearer <access_token> を付与する
 
 認証済みAPIリクエスト（apps/api側）
-  → verifySession ミドルウェア（Supabase JWT Secretで署名検証、有効期限チェック）
+  → verifySession ミドルウェア（SupabaseのJWKSエンドポイントで署名検証、有効期限チェック）
   → JWTのsubからcore.usersを検索し、tenantId・role・isActiveを取得
   → injectTenantContext ミドルウェア（SET app.tenant_id をDBに実行）
   → RLS自動適用（appスキーマのクエリに自動フィルタ）
@@ -114,7 +114,8 @@ export const verifySession = createMiddleware(async (c, next) => {
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
   if (!token) return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
 
-  // Supabase JWT Secret（HS256）または JWKS で署名・有効期限を検証
+  // SupabaseのJWKSエンドポイント（/auth/v1/.well-known/jwks.json）から公開鍵を取得して署名・有効期限を検証。
+  // 2025-10-1以降作成のプロジェクトはES256(非対称鍵)がデフォルトのため、固定のHS256共有シークレットは使わない
   const payload = await verifySupabaseJwt(token)
   if (!payload) return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
 
@@ -164,7 +165,7 @@ app.post('/api/v1/work-types', requireRole('admin'), handler)
 | `apps/api/src/routes/auth/index.ts` | `app.on(['POST','GET'], '/auth/*', (c) => auth.handler(c.req.raw))`によるBetter Authへの委譲ルートを削除。`/auth/sign-up`・`/auth/me`のみ自前ハンドラーとして残す |
 | `apps/api/src/routes/users/index.ts` | `initialPassword`発行方式を廃止し、Supabase Admin APIの招待機能に置き換え |
 | `apps/api/src/middleware/rate-limit.ts` | 変更なし（Upstash Redisはレート制限用途としては継続使用） |
-| 環境変数 | `BETTER_AUTH_SECRET`・`BETTER_AUTH_URL`を削除。`SUPABASE_URL`・`SUPABASE_ANON_KEY`・`SUPABASE_SERVICE_ROLE_KEY`・`SUPABASE_JWT_SECRET`を追加（詳細は`TECH-STACK.md`） |
+| 環境変数 | `BETTER_AUTH_SECRET`・`BETTER_AUTH_URL`を削除。`SUPABASE_URL`・`SUPABASE_ANON_KEY`・`SUPABASE_SERVICE_ROLE_KEY`を追加（JWT検証はJWKSエンドポイントを使うため専用の環境変数は不要。詳細は`TECH-STACK.md`） |
 | `apps/web` | Supabaseクライアント（`@supabase/supabase-js`または`@supabase/ssr`）を導入し、サインイン・トークン保持・自動リフレッシュを実装。APIへのリクエストに`Authorization: Bearer`を付与するfetchラッパーが必要 |
 | `docs/screens/verify-email-design.md` | Better Authの「サーバー検証→リダイレクト」前提で書かれた画面設計を、Supabase AuthのPKCEコールバック方式に合わせて作り直す必要あり（要フォローアップ） |
 | `docs/screens/signup-page-design.md`・`docs/screens/top-page-design.md` | `session_token`のレスポンス形式や「Better Auth経由」という記述の軽微な修正が必要（要フォローアップ） |

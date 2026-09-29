@@ -4,7 +4,6 @@ import { Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSignIn } from '@/hooks/useAuth'
-import { ApiError } from '@/lib/apiClient'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -25,8 +24,13 @@ export default function LoginPage() {
     try {
       await signIn.mutateAsync({ email, password })
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message)
+      const code = (err as { code?: string })?.code
+      if (code === 'email_not_confirmed') {
+        setError(
+          'メールアドレスが未確認です。登録時に送信された確認メール内のリンクをクリックしてください。',
+        )
+      } else if (code === 'invalid_credentials') {
+        setError('メールアドレスまたはパスワードが正しくありません')
       } else {
         setError('エラーが発生しました')
       }

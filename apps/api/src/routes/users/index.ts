@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { zValidator } from '@hono/zod-validator'
-import { hashPassword } from 'better-auth/crypto'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/index.js'
@@ -10,10 +9,9 @@ import {
   listUsers,
   updateUser,
 } from '../../db/queries/users.js'
-import { authAccount, authUser } from '../../db/schema/auth.js'
 import { users } from '../../db/schema/core.js'
 import { logger } from '../../lib/logger.js'
-import { passwordSchema } from '../../lib/password.js'
+import { supabaseAdmin } from '../../lib/supabase.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
 
@@ -27,7 +25,6 @@ const CreateSchema = z.object({
   employmentType: z.enum(EMPLOYMENT_TYPES),
   hourlyRate: z.number().nonnegative().nullable().optional(),
   monthlySalary: z.number().nonnegative().nullable().optional(),
-  initialPassword: passwordSchema,
 })
 
 const UpdateSchema = z
@@ -53,36 +50,27 @@ export const usersRouter = new Hono<AppEnv>()
     const data = c.req.valid('json')
     const tenantId = c.get('tenantId')
 
+    // Supabase Auth側にユーザーを作成し招待メールを送信する(本人が招待リンクから自分でパスワードを設定する)
+    const { data: invited, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(data.email)
+    if (error || !invited.user) {
+      logger.error({ err: error, email: data.email }, 'user_invite_failed')
+      return c.json(
+        { error: '招待に失敗しました。時間をおいて再度お試しください', code: 'INTERNAL_ERROR' },
+        500,
+      )
+    }
+
     const userId = randomUUID()
     const now = new Date()
-    const hashedPwd = await hashPassword(data.initialPassword)
 
-    // auth.user + auth.account + core.users をひとつのトランザクションで作成
-    const [coreUser] = await db.transaction(async (tx) => {
-      await tx.insert(authUser).values({
-        id: userId,
-        name: data.name,
-        email: data.email,
-        emailVerified: false,
-        createdAt: now,
-        updatedAt: now,
-      })
-
-      await tx.insert(authAccount).values({
-        id: randomUUID(),
-        accountId: userId,
-        providerId: 'credential',
-        userId,
-        password: hashedPwd,
-        createdAt: now,
-        updatedAt: now,
-      })
-
-      return tx
+    let coreUser: typeof users.$inferSelect
+    try {
+      const [inserted] = await db
         .insert(users)
         .values({
           id: userId,
           tenantId,
+          authUserId: invited.user.id,
           name: data.name,
           email: data.email,
           role: data.role,
@@ -94,7 +82,18 @@ export const usersRouter = new Hono<AppEnv>()
           updatedAt: now,
         })
         .returning()
-    })
+      coreUser = inserted
+    } catch (err) {
+      // 補償処理: core.usersの作成に失敗したらSupabase側の招待ユーザーも削除する
+      await supabaseAdmin.auth.admin.deleteUser(invited.user.id).catch((delErr) => {
+        logger.error({ err: delErr, authUserId: invited.user.id }, 'user_invite_compensation_delete_failed')
+      })
+      logger.error({ err, email: data.email }, 'user_create_failed')
+      return c.json(
+        { error: '登録に失敗しました。時間をおいて再度お試しください', code: 'INTERNAL_ERROR' },
+        500,
+      )
+    }
 
     logger.info({ tenantId, userId, email: data.email }, 'user_created')
     return c.json(

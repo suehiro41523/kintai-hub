@@ -1,16 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import { zValidator } from '@hono/zod-validator'
-import { hashPassword } from 'better-auth/crypto'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/index.js'
 import { findUserByEmail, findUserById } from '../../db/queries/users.js'
-import { authAccount, authUser } from '../../db/schema/auth.js'
 import { tenants, users } from '../../db/schema/core.js'
-import { auth } from '../../lib/auth.js'
 import { logger } from '../../lib/logger.js'
 import { passwordSchema } from '../../lib/password.js'
+import { supabaseAdmin, supabaseAuth } from '../../lib/supabase.js'
 import { formatValidationError } from '../../lib/validation.js'
+import { verifySession } from '../../middleware/auth.js'
 import { rateLimit } from '../../middleware/rate-limit.js'
 import type { AppEnv } from '../../types.js'
 
@@ -22,8 +21,9 @@ const SignUpSchema = z.object({
   plan: z.literal('free'),
 })
 
-// Better Auth のネイティブエンドポイントに対するラッパー。
-// フロントエンドの既存 API 呼び出しとの互換性を保ちつつ、core.users のデータを返す。
+// サインイン・サインアウト・パスワードリセット・MFA等はフロントエンドがSupabaseクライアントSDKで
+// 直接Supabase Authを呼び出す(apps/apiを経由しない)。ここに残るのはテナント作成を伴う
+// サインアップと、tenantId/roleを返すmeのみ(詳細はAUTH-DESIGN.md)。
 export const authRouter = new Hono<AppEnv>()
 
   .post('/sign-up', rateLimit, zValidator('json', SignUpSchema, formatValidationError), async (c) => {
@@ -37,79 +37,71 @@ export const authRouter = new Hono<AppEnv>()
       )
     }
 
+    // Supabase Auth側にユーザーを作成する。admin.createUserではなくsignUpを使うことで、
+    // 確認メール送信(Supabase Email Templates + カスタムSMTP)まで任せる
+    const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
+      email: data.email,
+      password: data.password,
+    })
+
+    if (signUpError || !signUpData.user) {
+      logger.error({ err: signUpError, email: data.email }, 'sign_up_supabase_create_user_failed')
+      return c.json(
+        { error: '登録に失敗しました。時間をおいて再度お試しください', code: 'INTERNAL_ERROR' },
+        500,
+      )
+    }
+
+    // 既に登録済み(未確認含む)のメールアドレスの場合、Supabaseはエラーを返さず
+    // identitiesが空のuserを返すことがあるため、その場合は重複として扱う
+    if (signUpData.user.identities && signUpData.user.identities.length === 0) {
+      return c.json(
+        { error: 'このメールアドレスは既に登録されています', code: 'CONFLICT' },
+        409,
+      )
+    }
+
+    const authUserId = signUpData.user.id
     const tenantId = randomUUID()
     const userId = randomUUID()
     const now = new Date()
-    const hashedPwd = await hashPassword(data.password)
 
-    // core.tenants + auth.user + auth.account + core.users をひとつのトランザクションで作成
-    await db.transaction(async (tx) => {
-      await tx.insert(tenants).values({
-        id: tenantId,
-        name: data.company_name,
-        plan: data.plan,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-      })
-
-      await tx.insert(authUser).values({
-        id: userId,
-        name: data.name,
-        email: data.email,
-        emailVerified: false,
-        createdAt: now,
-        updatedAt: now,
-      })
-
-      await tx.insert(authAccount).values({
-        id: randomUUID(),
-        accountId: userId,
-        providerId: 'credential',
-        userId,
-        password: hashedPwd,
-        createdAt: now,
-        updatedAt: now,
-      })
-
-      // role は常に 'admin' 固定。リクエストに role 相当のパラメータがあってもスキーマに存在しないため無視される
-      await tx.insert(users).values({
-        id: userId,
-        tenantId,
-        name: data.name,
-        email: data.email,
-        role: 'admin',
-        employmentType: 'full_time',
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      })
-    })
-
-    // /sign-in と同じ方式で Better Auth にセッション Cookie を発行させる
-    const baResponse = await auth.api.signInEmail({
-      body: { email: data.email, password: data.password },
-      headers: c.req.raw.headers,
-      asResponse: true,
-    })
-
-    for (const [key, value] of baResponse.headers.entries()) {
-      if (key.toLowerCase() === 'set-cookie') {
-        c.header('set-cookie', value, { append: true })
-      }
-    }
-
-    // 確認メール送信。送信に失敗してもサインアップ自体は成功として扱う（再送信ボタンで復旧可能なため）
     try {
-      await auth.api.sendVerificationEmail({
-        body: {
+      // core.tenants + core.users をひとつのトランザクションで作成
+      await db.transaction(async (tx) => {
+        await tx.insert(tenants).values({
+          id: tenantId,
+          name: data.company_name,
+          plan: data.plan,
+          status: 'active',
+          createdAt: now,
+          updatedAt: now,
+        })
+
+        // role は常に 'admin' 固定。リクエストに role 相当のパラメータがあってもスキーマに存在しないため無視される
+        await tx.insert(users).values({
+          id: userId,
+          tenantId,
+          authUserId,
+          name: data.name,
           email: data.email,
-          callbackURL: `${(process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '')}/verify-email`,
-        },
-        headers: c.req.raw.headers,
+          role: 'admin',
+          employmentType: 'full_time',
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
       })
     } catch (err) {
-      logger.error({ err, email: data.email }, 'sign_up_verification_email_failed')
+      // 補償処理: core.tenants/core.usersの作成に失敗したらSupabase側のユーザーも削除する
+      await supabaseAdmin.auth.admin.deleteUser(authUserId).catch((delErr) => {
+        logger.error({ err: delErr, authUserId }, 'sign_up_compensation_delete_failed')
+      })
+      logger.error({ err, email: data.email }, 'sign_up_transaction_failed')
+      return c.json(
+        { error: '登録に失敗しました。時間をおいて再度お試しください', code: 'INTERNAL_ERROR' },
+        500,
+      )
     }
 
     logger.info({ tenantId, userId, email: data.email }, 'tenant_signed_up')
@@ -122,7 +114,6 @@ export const authRouter = new Hono<AppEnv>()
           name: data.name,
           email: data.email,
           role: 'admin' as const,
-          emailVerified: false,
         },
         tenant: {
           id: tenantId,
@@ -136,83 +127,8 @@ export const authRouter = new Hono<AppEnv>()
     )
   })
 
-  .post('/sign-in', async (c) => {
-    const body = await c.req.json<{ email?: string; password?: string }>()
-
-    if (!body.email || !body.password) {
-      return c.json(
-        { error: 'メールアドレスとパスワードを入力してください', code: 'INVALID_REQUEST' },
-        400,
-      )
-    }
-
-    // Better Auth でパスワード検証 + セッション Cookie を発行する
-    const baResponse = await auth.api.signInEmail({
-      body: { email: body.email, password: body.password },
-      headers: c.req.raw.headers,
-      asResponse: true,
-    })
-
-    if (!baResponse.ok) {
-      return c.json(
-        {
-          error: 'メールアドレスまたはパスワードが正しくありません',
-          code: 'INVALID_CREDENTIALS',
-        },
-        401,
-      )
-    }
-
-    const baData = (await baResponse.json()) as { user: { id: string; emailVerified: boolean } }
-    const coreUser = await findUserById(baData.user.id)
-
-    if (!coreUser || !coreUser.isActive) {
-      return c.json({ error: 'アカウントが無効です', code: 'ACCOUNT_INACTIVE' }, 401)
-    }
-
-    // Better Auth が発行した Set-Cookie をそのままフロントに転送する
-    for (const [key, value] of baResponse.headers.entries()) {
-      if (key.toLowerCase() === 'set-cookie') {
-        c.header('set-cookie', value, { append: true })
-      }
-    }
-
-    return c.json({
-      user: {
-        id: coreUser.id,
-        tenantId: coreUser.tenantId,
-        name: coreUser.name,
-        email: coreUser.email,
-        role: coreUser.role,
-        emailVerified: baData.user.emailVerified,
-      },
-    })
-  })
-
-  .post('/sign-out', async (c) => {
-    const baResponse = await auth.api.signOut({
-      headers: c.req.raw.headers,
-      asResponse: true,
-    })
-
-    // Better Auth が発行したクッキー削除ヘッダーを転送する
-    for (const [key, value] of baResponse.headers.entries()) {
-      if (key.toLowerCase() === 'set-cookie') {
-        c.header('set-cookie', value, { append: true })
-      }
-    }
-
-    return c.json({ success: true })
-  })
-
-  .get('/me', async (c) => {
-    const session = await auth.api.getSession({ headers: c.req.raw.headers })
-
-    if (!session?.user) {
-      return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
-    }
-
-    const coreUser = await findUserById(session.user.id)
+  .get('/me', verifySession, async (c) => {
+    const coreUser = await findUserById(c.get('userId'))
     if (!coreUser || !coreUser.isActive) {
       return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
     }
@@ -224,7 +140,6 @@ export const authRouter = new Hono<AppEnv>()
         name: coreUser.name,
         email: coreUser.email,
         role: coreUser.role,
-        emailVerified: session.user.emailVerified,
       },
     })
   })

@@ -2,9 +2,7 @@ import process from 'node:process'
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { auth } from './lib/auth.js'
 import { logger } from './lib/logger.js'
-import { rateLimit } from './middleware/rate-limit.js'
 import { requestLogger } from './middleware/request-logger.js'
 import { authRouter } from './routes/auth/index.js'
 import { billingRouter } from './routes/billing/index.js'
@@ -32,13 +30,10 @@ app.use(
 )
 app.use('*', requestLogger)
 
-// Better Authネイティブの確認メール再送信エンドポイントにもBot対策のレート制限を適用する
-app.use('/auth/send-verification-email', rateLimit)
-
-// /auth/me はカスタムハンドラー（core.users の tenantId/role を返す）
+// サインイン・サインアウト・パスワードリセット・MFA・メール確認はフロントエンドが
+// Supabaseクライアントで直接Supabase Authを呼び出すため、apps/apiには来ない。
+// ここに残るのは /auth/sign-up（テナント作成を伴う）と /auth/me のみ（AUTH-DESIGN.md参照）
 app.route('/auth', authRouter)
-// その他の /auth/* は Better Auth が処理する（sign-in/email, sign-out, get-session 等）
-app.on(['POST', 'GET'], '/auth/*', (c) => auth.handler(c.req.raw))
 
 app.route('/work-types', workTypesRouter)
 app.route('/time-records', timeRecordsRouter)
