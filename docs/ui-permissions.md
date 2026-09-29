@@ -22,10 +22,13 @@
 
 ## 未確認（メール未認証）ユーザーの挙動
 
-ダッシュボード全体（`/(dashboard)` 配下）は `layout.tsx` で `useMe()`（`GET /auth/session`）の `user.emailVerified` を確認する。`false` の場合は `/login` 等へリダイレクトせず、サイドバー・ページ内容を描画する代わりに「メールアドレスが未確認です」というブロッキングメッセージ画面を表示する。
+> 2026-09-29更新: 認証をBetter AuthからSupabase Authに変更したことに伴い全面改訂（詳細は[AUTH-DESIGN.md](../AUTH-DESIGN.md)）。
 
-- リダイレクトしない理由：ユーザーは既にログイン済み（Cookieセッションあり）のため、未認証扱いにする必要はない
-- メッセージ画面には確認メールの再送信導線（`POST /auth/send-verification-email`）を設置する。詳細は [screens/verify-email-design.md](./screens/verify-email-design.md) を参照
+Supabaseプロジェクト側で「メール確認必須（Enable email confirmations）」を有効化しているため、メールアドレス未確認のユーザーは`supabase.auth.signInWithPassword`自体が失敗し、セッションを取得できない。そのため v1.0（Better Auth）時点にあった「ログインはできるがダッシュボードでブロックする」という状態は発生しなくなった。ガードのタイミングがダッシュボード（`(dashboard)/layout.tsx`）から`/login`画面に移った。
+
+- サインイン失敗時、Supabaseが返すエラーコード`email_not_confirmed`を`apps/web/src/app/login/page.tsx`で検知し、「メールアドレスが未確認です。登録時に送信された確認メール内のリンクをクリックしてください。」というエラーメッセージをフォーム下部に表示する
+- このエラーメッセージ自体に確認メールの再送信ボタンは設置しない（Phase 1では意図的に見送り、確定）。再送信は`/verify-email`画面（サインアップ直後の待機画面、または`?email=`クエリ付きで遷移した場合）のみが担う。ログイン画面からの再送信ニーズが顕在化したらPhase 2以降で追加を検討する
+- 詳細は [screens/verify-email-design.md](./screens/verify-email-design.md) を参照
 
 ---
 
