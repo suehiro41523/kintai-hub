@@ -1,18 +1,31 @@
 # verify-email-design.md — メール認証画面設計書
 
-> バージョン: 1.0 / 作成日: 2026-08-03 / ステータス: ドラフト
+> バージョン: 2.0 / 作成日: 2026-08-03 / 更新日: 2026-09-28 / ステータス: ドラフト
 > 対象パス: `/verify-email`（新規） / 関連: [signup-page-design.md](./signup-page-design.md), [AUTH-DESIGN.md](../../AUTH-DESIGN.md)
+
+> 2026-09-28更新: 認証ライブラリをBetter AuthからSupabase Authに変更したことに伴い全面改訂（v1.0からの変更点は0章参照）。verifyOtpのエラーコード等、実装時にSupabase側の挙動を最終確認すべき箇所は「要確認」と明記した。
 
 ---
 
 ## 0. 前提・スコープ
 
 - [signup-page-design.md 8章](./signup-page-design.md#8-関連画面メール認証待ちverify-email)で「詳細設計は別途」としていた画面の本設計。
-- 本画面は **2つの異なる文脈** で同一パスに表示される、1つのReactページ（`apps/web/src/app/verify-email/page.tsx`）とする。
+- 本画面は **2つの異なる文脈** で同一パスに表示される、1つのReactページ（`apps/web/src/app/verify-email/page.tsx`）とする点はv1.0から変更なし。
   - **パターンA（待機）**：`/signup` 完了直後の遷移先。URLクエリ無し。「メールを送ったので確認してください」の待機画面。
-  - **パターンB（結果表示）**：メール本文中のリンク（Better Authがサーバー側で検証した後にリダイレクトしてくる先）としての着地。フロントはtokenを受け取らず、`error`クエリの有無・値と `GET /auth/session` の結果から成功／失敗を表示する。
-- 認証方式は [AUTH-DESIGN.md](../../AUTH-DESIGN.md) の通り Better Auth（セルフホスト）+ Cookieセッション。サインアップ完了時点（`POST /auth/sign-up`）で既に `session_token` が発行されCookieがセットされている＝**ユーザーは未認証ではなく「メール未確認のログイン中ユーザー」**という状態になる点が設計上の前提。
-- **メール確認方式は Better Auth 標準機能に委譲する（確定）。** カスタムの検証APIはアプリ側（`/api/v1/...`）に実装しない。トークンはBetter Auth標準ルート（`GET /auth/verify-email`）がAPIサーバー側で直接検証し、結果に応じて `callbackURL` へリダイレクトする。**フロントの `/verify-email` ページは token を一度も受け取らない**（メール本文中のリンクはNext.jsではなくAPIサーバーを直接指す）。詳細は5章。
+  - **パターンB（結果表示）**：メール本文中のリンクとしての着地。ただしv1.0とは着地の仕組みが異なる（後述）。
+- 認証方式は [AUTH-DESIGN.md](../../AUTH-DESIGN.md) の通り Supabase Auth（マネージド）+ JWT（Bearerトークン）。**Cookieは使わない。**
+
+### v1.0（Better Auth）からの主な変更点
+
+| 項目 | v1.0（Better Auth） | v2.0（Supabase Auth） |
+|---|---|---|
+| メール内リンクの飛び先 | APIサーバー（`{API_URL}/api/v1/auth/verify-email?token=...`）を直接指す | **フロントエンド自身**（`{WEB_URL}/verify-email?token_hash=...&type=email`）を指す |
+| 検証の実行主体 | APIサーバー（Better Auth）がリンククリック時にサーバー側で検証済みの状態でフロントに着地する | **フロントエンドが**`/verify-email`ページのマウント時に`supabase.auth.verifyOtp({ token_hash, type: 'email' })`を呼んで検証する（クロスデバイスで動作させるため、Supabase推奨の`token_hash`方式を採用。詳細は5章） |
+| サインアップ直後のログイン状態 | `POST /auth/sign-up`が`session_token`を返しCookieがセットされるため、待機画面表示時点で「メール未確認のログイン中ユーザー」 | `POST /auth/sign-up`はSupabase Admin API経由でユーザーを作成するのみでセッションは発行しない（[AUTH-DESIGN.md](../../AUTH-DESIGN.md)参照）。**待機画面表示時点ではフロントは未ログイン**。セッション確認（`GET /auth/session`相当）には依存できない |
+| 待機画面でのメールアドレス表示 | `GET /auth/session`の`user.email`から取得 | サインアップフォームから渡された値を保持して表示（未ログインのためセッションAPIを呼べない。6章参照） |
+| 再送信 | `POST /auth/send-verification-email`（自社API） | `supabase.auth.resend({ type: 'signup', email })`（フロントから直接Supabase Authを呼ぶ） |
+| トークン有効期限 | Better Authデフォルト1時間→`emailVerification.expiresIn: 86400`で24時間に変更 | Supabase Authデフォルトも1時間（`MAILER_OTP_EXP`）→Supabaseダッシュボード（Authentication > Email）側の設定で24時間（86400秒）に変更 |
+| 失敗時のエラー種別 | `callbackURL?error=TOKEN_EXPIRED\|INVALID_TOKEN\|USER_NOT_FOUND` | `verifyOtp()`が返す`AuthError`。期限切れは`otp_expired`を確認済み。それ以外のエラーコードの網羅は実装時に要確認（4章参照） |
 
 ---
 
@@ -21,7 +34,7 @@
 | 項目 | 内容 |
 |---|---|
 | 画面の役割 | メールアドレスの実在確認を行い、未確認ユーザーをダッシュボード利用可能な状態にする |
-| 完了条件 | メール確認が完了し、`core.users` 側の確認フラグが立った状態で `/clock` へ到達する |
+| 完了条件 | メール確認が完了し、Supabase Auth側で`email_confirmed_at`が設定された状態でサインインし、`/clock` へ到達する |
 | 離脱防止方針 | 「何をすればいいか」「メールが来ない時どうするか」を常に画面上に明示する |
 
 ---
@@ -29,47 +42,44 @@
 ## 2. 画面パターンと遷移
 
 ```
-[/signup] 送信成功
-   ↓ router.replace('/verify-email')
-[/verify-email]（パターンA：待機。errorクエリ無し・emailVerified=false）
-   - GET /auth/session から email・emailVerified を取得
-   - 「確認メールを送信しました」
-   - [確認メールを再送信] ボタン → POST /auth/send-verification-email
+[/signup] 送信成功（core.tenants・core.users・Supabase Auth側のユーザー作成が完了。セッションは無い）
+   ↓ router.push('/verify-email?email=admin@example.com')
+     ※パスワードは渡さない。メールアドレスのみクエリ経由で待機画面に引き継ぐ
+[/verify-email]（パターンA：待機。token_hashクエリ無し）
+   - URLクエリの email を表示（3.1参照）
+   - [確認メールを再送信] ボタン → supabase.auth.resend({ type: 'signup', email })
    ↓（別タブ／別デバイスでメールを開きリンクをクリック）
-メール内リンクはNext.jsの/verify-emailではなく、APIサーバーのBetter Auth標準ルートを直接指す
-   例: {API_URL}/api/v1/auth/verify-email?token=...&callbackURL={WEB_URL}/verify-email
+メール内リンクは apps/web の /verify-email を直接指す（Supabase側のホストエンドポイントは経由しない設定にする）
+   例: {WEB_URL}/verify-email?token_hash=pkce_xxxxx&type=email
    ↓
-Better Authがサーバー側でトークンを検証（フロントはこの時点では何も呼ばれていない）
-   - 成功 or 既に確認済み → callbackURLへリダイレクト（クエリ付与なし）
-   - 失敗 → callbackURL?error=TOKEN_EXPIRED / INVALID_TOKEN / USER_NOT_FOUND へリダイレクト
-   ↓
-[/verify-email]（パターンB：結果表示。ブラウザがリダイレクトで着地した状態）
-   - errorクエリあり → 対応するエラー状態を表示
-   - errorクエリなし → GET /auth/session で emailVerified を確認 → true なら成功表示 → [ダッシュボードへ進む] → /clock
+[/verify-email]（パターンB：結果表示。token_hashクエリあり）
+   - ページマウント時にフロントが supabase.auth.verifyOtp({ token_hash, type: 'email' }) を呼ぶ
+   - 成功 → セッション確立（SDKが内部でaccess_token/refresh_tokenを保持）→ verified表示
+   - 失敗（otp_expired等） → 対応するエラー状態を表示
 ```
 
-**パターンAの画面を開いたままリンクをクリックした場合**（同一タブ運用）：リンク自体がAPIサーバーを指しているため、クリックした瞬間にNext.jsのページからは離脱し、Better Authの検証・リダイレクトを経て再び `/verify-email` に戻ってくる（＝パターンAとパターンBは同一URLへの「行って戻ってくる」遷移であり、フロント側でtokenを見て表示を切り替えるという分岐は不要）。
+**パターンAの画面を開いたままリンクをクリックした場合**（同一タブ運用）：リンクが`/verify-email`自身を指す（クエリだけ変わる）ため、Next.jsのクライアントサイドルーティングでは検知できずブラウザの通常ナビゲーションとして扱われる。ページは再マウントされ、`token_hash`クエリの有無で改めてA/Bの分岐に入る（v1.0と挙動は同じ）。
 
-**別タブでリンクを開いた場合**（一般的な運用、確定仕様）：パターンAのタブは `visibilitychange`/`focus` イベントを監視し、タブがフォアグラウンドに復帰した瞬間に `GET /auth/session` を再取得する。`emailVerified: true` になっていれば自動的に `/clock` へリダイレクトする。メール内リンクをクリックした後に元のタブへ戻る操作を必ず伴うため、ポーリングは実装しない（API呼び出しを最小限に保つため）。
+**別タブでリンクを開いた場合**（一般的な運用、確定仕様）：v1.0では`GET /auth/session`のポーリング代替として`focus`イベントで再取得していたが、v2.0では待機画面がそもそも未ログイン・セッション非依存（0章参照）のため、**フォーカス時の自動再取得は行わない**。別タブでの確認完了後、ユーザー自身が元のタブに戻って「ログインへ進む」等の導線を明示的に押す設計に変更する（4章参照）。
 
 ---
 
 ## 3. レイアウト構成
 
-`/login` `/signup` と同一の中央寄せ単一カード構成を踏襲する。
+`/login` `/signup` と同一の中央寄せ単一カード構成を踏襲する（v1.0から変更なし）。
 
 ### 3.1 パターンA（待機）
 
 ```
 ┌─────────────────────────────────────┐
-│  [Clockアイコン] KintaiHub            │
+│  [ロゴ] KintaiHub                     │
 │                                       │
 │  ┌─────────────────────────────┐    │
 │  │        ✉（封筒アイコン）      │    │
 │  │                               │    │
 │  │  確認メールを送信しました       │    │ ← 見出し
 │  │                               │    │
-│  │  admin@example.com 宛に        │    │ ← セッションから取得したemail
+│  │  admin@example.com 宛に        │    │ ← URLクエリの email から表示
 │  │  確認リンクを送信しました。     │    │
 │  │  メール内のリンクをクリックして  │    │
 │  │  登録を完了してください。       │    │
@@ -89,13 +99,13 @@ Better Authがサーバー側でトークンを検証（フロントはこの時
 
 ### 3.2 パターンB（結果表示）
 
-トークン検証自体はBetter Authが着地前に完了させているため、フロントの「検証中」はページマウント直後の `GET /auth/session` 確認（一瞬）のみ。状態に応じて中央のアイコン／見出し／本文／ボタンを差し替える（カード枠は共通）。
+v1.0とは異なり、**検証（`verifyOtp`呼び出し）自体をこのページが行う**ため、「確認しています…」はネットワーク往復を伴う実質的な処理中状態になる（v1.0はセッション確認のみの一瞬の表示だった）。
 
 ```
 ┌─────────────────────────────┐
 │      ⏳ / ✅ / ⚠️              │ ← 状態に応じたアイコン
 │                               │
-│  確認しています…              │ ← セッション確認中（一瞬）
+│  確認しています…              │ ← verifyOtp応答待ち
 │  （or メール認証が完了しました） │ ← 成功
 │  （or リンクの有効期限が切れて   │ ← 失敗
 │   います）                    │
@@ -111,34 +121,33 @@ Better Authがサーバー側でトークンを検証（フロントはこの時
 
 | 状態 | 発生条件 | 表示 | ボタン |
 |---|---|---|---|
-| `checking`（確認中） | マウント直後、`GET /auth/session` 応答待ちの一瞬 | スピナー＋「確認しています…」 | なし |
-| `waiting`（待機） | `error`クエリ無し ＋ `session.user.emailVerified === false` | 3.1のレイアウト | 「確認メールを再送信」 |
+| `waiting`（待機） | `token_hash`クエリ無し | 3.1のレイアウト。`email`クエリが無い場合は「ご登録のメールアドレス宛に」とフォールバック表示（9章） | 「確認メールを再送信」 |
 | `resending` | 再送信ボタン押下中 | ボタンを「送信中...」+ disabled | — |
-| `resent` | 再送信成功 | ボタン下に「再送信しました」（`text-green-600`、数秒でフェードアウト or 常時表示） | 「確認メールを再送信」（再度押下可、7章のレート制限に従う） |
-| `verified`（成功） | `error`クエリ無し ＋ `session.user.emailVerified === true`（Better Auth側で「新規に確認」「既に確認済み」のどちらだったかは判別しない。同じ表示に統合） | ✅＋「メール認証が完了しました」 | 「ダッシュボードへ進む」（`/clock`） |
-| `expired`（期限切れ） | `?error=TOKEN_EXPIRED` | ⚠️＋「リンクの有効期限が切れています」 | 「確認メールを再送信」 |
-| `invalid`（不正トークン） | `?error=INVALID_TOKEN` または `?error=USER_NOT_FOUND` | ⚠️＋「無効なリンクです」 | 「ログイン画面へ」（`/login`） |
+| `resent` | 再送信成功 | ボタン下に「再送信しました」（`text-green-600`） | 「確認メールを再送信」（再度押下可、7章のクールダウンに従う） |
+| `checking`（検証中） | `token_hash`クエリあり、`verifyOtp`応答待ち | スピナー＋「確認しています…」 | なし |
+| `verified`（成功） | `verifyOtp`成功 | ✅＋「メール認証が完了しました」 | 「ダッシュボードへ進む」（`/clock`。5章の通りverifyOtp成功時点でセッションは確立済み） |
+| `expired`（期限切れ） | `verifyOtp`失敗、エラーコード`otp_expired` | ⚠️＋「リンクの有効期限が切れています」 | 「確認メールを再送信」（このボタンから再送信する場合、emailはURLクエリではなく画面上の入力欄で受け取る。9章参照） |
+| `invalid`（不正トークン） | `verifyOtp`失敗、`otp_expired`以外のエラー | ⚠️＋「無効なリンクです」 | 「ログイン画面へ」（`/login`） |
 
-`already_verified` は独立した状態にしない：Better Auth標準ルートは「新規に確認できた場合」と「既に確認済みだった場合」のどちらも `callbackURL` へエラー無しでリダイレクトするため、フロント側では区別できず・区別する必要もない（`verified`状態に統合）。
+**要確認（実装時）**: `verifyOtp`が返す`AuthError`のうち`otp_expired`は確認済みだが、トークンが存在しない・既に使用済み等の他のケースで具体的にどのエラーコード／メッセージが返るかはSupabase側の挙動を実装時に確認し、`expired`/`invalid`の判定ロジックを確定させる。`already_verified`（既に確認済みのリンクを再度踏んだ場合）を`invalid`と`verified`のどちらに倒すかも合わせて確認する。
 
 ---
 
 ## 5. API連携
 
-メール確認はBetter Auth標準機能に委譲する（確定）。カスタムAPIは実装せず、Better Authが標準で提供する以下2エンドポイントをそのまま使う（`api-spec.md` 1章に追記済み）。
+メール確認はSupabase Auth標準機能（`verifyOtp`）に委譲する。カスタムAPIは実装しない。
 
-| メソッド | エンドポイント | 概要 | フロントの呼び方 |
-|---|---|---|---|
-| GET | `/auth/verify-email` | トークン検証。成功/既確認は `callbackURL` へ無印リダイレクト、失敗は `callbackURL?error=CODE` へリダイレクト | フロントからは呼ばない。メール本文のリンク先として使うのみ |
-| POST | `/auth/send-verification-email` | 確認メール送信・再送信。body: `email`, `callbackURL?` | 再送信ボタンから呼ぶ |
+| 呼び出し | 概要 | フロントの呼び方 |
+|---|---|---|
+| `supabase.auth.verifyOtp({ token_hash, type: 'email' })` | メールリンクのtoken_hashを検証し、成功時はセッション（access_token/refresh_token）をSDK内部に確立する | パターンBのページマウント時に自動実行 |
+| `supabase.auth.resend({ type: 'signup', email })` | 確認メールの再送信 | 再送信ボタンから呼ぶ |
 
-パターンAでの表示メールアドレス・確認状態の取得は新規APIを使わず、既存の `GET /auth/session`（`api-spec.md` 認証API #4）のレスポンス（`user.email`, `user.emailVerified`）を利用する。
+**実装上の前提設定（Supabaseプロジェクト側）**
 
-**実装上の前提設定（Better Auth側）**
-
-- `emailVerification.sendVerificationEmail` に Resend連携の送信処理を実装しないと `send-verification-email` は `400 VERIFICATION_EMAIL_NOT_ENABLED` を返す（必須設定）。
-- トークン有効期限のデフォルトは1時間（3600秒）。4章決定の「24時間」を満たすには `emailVerification.expiresIn: 86400` の明示設定が必要（デフォルトのままでは要件を満たさない点に注意）。
-- `POST /auth/send-verification-email` は既にログイン中（Cookieセッションあり）かつ `session.user.emailVerified === true` の場合 `400 EMAIL_ALREADY_VERIFIED` を返す。再送信ボタン押下時にこのエラーを受けたら「既に認証済みです」表示へ切り替え、`/clock` への導線を出す。
+- Email Templates（Authentication > Email Templates > Confirm signup）のリンクを、Supabase既定のホスト型検証URLではなく`{WEB_URL}/verify-email?token_hash={{ .TokenHash }}&type=email`を指す形式にカスタマイズする必要がある（クロスデバイスで動作する`token_hash`方式を使うため。0章の変更点表を参照）。
+- トークン有効期限：Authentication > Email設定の`MAILER_OTP_EXP`相当の項目で24時間（86400秒）に変更する（デフォルトはBetter Auth同様1時間のため、変更しないと要件を満たさない）。
+- カスタムSMTP（Resend）の設定が必須（デフォルトのSupabase組み込みSMTPは2通/時間の制限があり本番不可。`TECH-STACK.md`参照）。
+- `POST /auth/sign-up`（apps/api）はサインアップ完了時点でセッションを発行しないため、パターンAの待機画面は非ログイン状態で表示される前提でよい（0章参照）。
 
 ---
 
@@ -147,55 +156,52 @@ Better Authがサーバー側でトークンを検証（フロントはこの時
 ### パターンA：初期表示・再送信
 
 ```
-ページマウント（URLにerrorクエリ無し）
+ページマウント（URLに token_hash クエリ無し）
    ↓
-状態を checking に設定
+URLクエリの email を読み取り画面に表示（無ければフォールバック文言）
    ↓
-GET /auth/session
-   ↓（emailVerified: true）verified に遷移 → 2〜3秒後 /clock へ自動リダイレクト（+ 手動ボタンも表示）
-   ↓（emailVerified: false）waiting に遷移、email をセッションから表示
+waiting 状態で表示（v1.0と異なりセッション確認は行わない）
 
 「確認メールを再送信」クリック
    ↓
 ボタンを「送信中...」+ disabled
    ↓
-POST /auth/send-verification-email { email, callbackURL: `${WEB_URL}/verify-email` }
+supabase.auth.resend({ type: 'signup', email })
    ↓（成功）「再送信しました」表示、7章のクールダウン開始
-   ↓（400 EMAIL_ALREADY_VERIFIED）verified に遷移（他タブ等で確認済みになっていた場合）
-   ↓（429）「しばらくしてから再度お試しください」+ 次回送信可能までの残り時間表示
+   ↓（失敗。レート制限・ネットワークエラー等）「送信に失敗しました。時間をおいて再度お試しください」+ 7章のクールダウン開始（連打防止）
 ```
 
 ### パターンB：メールリンク経由での着地
 
 ```
-メール内リンククリック（ブラウザはAPIサーバーのBetter Authルートへ遷移。Next.jsページはまだ開始していない）
-   ↓
-Better Authがサーバー側でトークン検証
-   ↓（成功 or 既に確認済み）/verify-email へリダイレクト（クエリ無し）
-   ↓（失敗）/verify-email?error=TOKEN_EXPIRED|INVALID_TOKEN|USER_NOT_FOUND へリダイレクト
+メール内リンククリック（ブラウザは apps/web の /verify-email へ直接遷移。token_hash・type をクエリに含む）
    ↓
 Next.jsの/verify-emailページがマウント
-   ↓（errorクエリあり）
-      TOKEN_EXPIRED → expired に遷移
-      INVALID_TOKEN / USER_NOT_FOUND → invalid に遷移
-   ↓（errorクエリなし）
-      上記「パターンA：初期表示」と同じ checking → GET /auth/session の分岐に合流
+   ↓（token_hashクエリあり）
+checking に遷移
+   ↓
+supabase.auth.verifyOtp({ token_hash, type: 'email' }) を実行
+   ↓（成功）verified に遷移（セッション確立済み）
+   ↓（失敗・otp_expired）expired に遷移
+   ↓（失敗・その他）invalid に遷移
 ```
 
 ---
 
 ## 7. 再送信のレート制限
 
-`api-spec.md` 共通仕様（認証エンドポイント: 10req/min）に準拠しつつ、UX上はより厳しいクールダウンをフロント側でも設ける。
+`api-spec.md`共通仕様（認証エンドポイント: 10req/min）はapps/api向けの規定であり、`supabase.auth.resend()`はSupabase Auth側のレート制限（既定30req/5分・IPごと。詳細は`AUTH-DESIGN.md`関連の調査内容を参照）に従う。UX上はv1.0同様、フロント側でもクールダウンを設ける。
 
 - 再送信ボタンは1回押下後 **60秒間disabled**（連打防止、サーバー側レート制限に頼りきらない）
+- このクールダウンは送信成功時だけでなく、失敗時にも同様に適用する
+- 失敗時のエラーメッセージは次にボタンを押す（＝クールダウン終了後の再送信）まで表示し続ける
 - disabled中はボタンラベルに残り秒数を表示：「再送信（あと45秒）」
 
 ---
 
 ## 8. デザイントーン
 
-`/login` `/signup` と統一（[top-page-design.md 7章](./top-page-design.md#7-デザイントーンuiガイドライン)と同一基準）。
+`/login` `/signup` と統一（[top-page-design.md 7章](./top-page-design.md#7-デザイントーンuiガイドライン)と同一基準）。v1.0から変更なし。
 
 | 項目 | 値 |
 |---|---|
@@ -211,26 +217,29 @@ Next.jsの/verify-emailページがマウント
 
 - 確認中（`checking`）のスピナーには `aria-live="polite"` を付与し、状態変化がスクリーンリーダーに伝わるようにする
 - 再送信のクールダウン残り秒数はボタンの `aria-label` にも反映（視覚的な秒数表示だけに依存しない）
-- メールアドレスの表示は正しく取得できなかった場合（セッション取得失敗等）に空表示にならないよう、フォールバック文言「ご登録のメールアドレス宛に」を用意する
+- **待機画面（パターンA）のメールアドレス表示はURLクエリ由来**であり、直接URLアクセス等でクエリが無い場合は空表示にならないよう、フォールバック文言「ご登録のメールアドレス宛に」を用意する（v1.0はセッション取得失敗時のフォールバックだったが、v2.0はそもそも未ログイン前提のため常にこのフォールバックを考慮する必要がある）
+- `expired`状態からの再送信は、待機画面と異なりURLクエリにemailが無い可能性がある（メールリンクを踏んだ結果の遷移のため）。再送信用にメールアドレス入力欄を画面内に設けるか、`token_hash`検証失敗時のレスポンスからメールアドレスを復元できるか実装時に確認する
 
 ---
 
 ## 10. 今後の検討事項（未確定）
 
-- 確認メール自体の文面・送信元設定（Resend連携）：11章に草案を作成済みだが、送信元ドメイン・法務文言・最終コピーは未承認
+- 確認メール自体の文面・送信元設定（Resend連携、Supabase側のメールテンプレート機能で設定）：11章に草案を作成済みだが、送信元ドメイン・法務文言・最終コピーは未承認
+- 4章「要確認」に記載した`verifyOtp`の詳細なエラーコード網羅
+- 9章「要確認」に記載した`expired`状態からの再送信時のメールアドレス取得方法
 
 **決定済み（このドキュメント外にも反映）**
 
-- メール確認方式：Better Auth標準機能に委譲（0章・5章に反映）
-- トークン有効期限：24時間（`emailVerification.expiresIn: 86400` の明示設定が必要。5章に反映）
-- メール確認未完了ユーザーが `/clock` 等へアクセスした場合のガード方針：「メールが未確認です」というブロッキングメッセージを表示する。詳細は [ui-permissions.md](../ui-permissions.md) の「未確認（メール未認証）ユーザーの挙動」を参照
-- 別タブでリンクを開いた場合の待機タブ（パターンA）の自動更新方式：フォーカス時再取得のみ（`visibilitychange`/`focus`イベント）。ポーリングは実装しない（2章に反映）
+- メール確認方式：Supabase Auth標準機能（`verifyOtp` + `token_hash`）に委譲（0章・5章に反映）
+- トークン有効期限：24時間（Supabaseダッシュボードでの設定変更が必要。5章に反映）
+- メール確認未完了ユーザーが `/clock` 等へアクセスした場合のガード方針：「メールが未確認です」というブロッキングメッセージを表示する。詳細は [ui-permissions.md](../ui-permissions.md) の「未確認（メール未認証）ユーザーの挙動」を参照（v1.0から変更なし）
+- 別タブでリンクを開いた場合の待機タブ（パターンA）：v2.0では自動更新（フォーカス時再取得）を廃止し、ユーザー自身の明示的な操作に委ねる（2章に反映）
 
 ---
 
 ## 11. 確認メール文面（草案・未承認）
 
-送信元ドメイン・法務文言・最終コピーは未確定のため、実装着手前に要承認。`emailVerification.sendVerificationEmail`（Resend連携）に渡す内容の草案として以下を提案する。
+送信元ドメイン・法務文言・最終コピーは未確定のため、実装着手前に要承認。Supabase Authのメールテンプレート（Authentication > Email Templates > Confirm signup）に設定する内容の草案として以下を提案する。
 
 | 項目 | 値（草案） |
 |---|---|
@@ -241,12 +250,12 @@ Next.jsの/verify-emailページがマウント
 **本文（草案）**
 
 ```
-{{name}} 様
+{{ .Data.name }} 様
 
 KintaiHubにご登録いただきありがとうございます。
 以下のリンクをクリックして、メールアドレスの確認を完了してください。
 
-{{verificationUrl}}
+{{ .SiteURL }}/verify-email?token_hash={{ .TokenHash }}&type=email
 
 ※このリンクの有効期限は24時間です。期限が切れた場合は、
 　サインアップ画面またはログイン後の画面から再送信してください。
@@ -256,9 +265,9 @@ KintaiHubにご登録いただきありがとうございます。
 
 --
 KintaiHub
-（フッター：会社情報・配信停止に関する記載は要法務確認。9〜10章の法務コンテンツ整備待ち）
+（フッター：会社情報・配信停止に関する記載は要法務確認。10章の法務コンテンツ整備待ち）
 ```
 
-- `{{verificationUrl}}` は Better Auth が生成する `GET /auth/verify-email?token=...&callbackURL=...` のフルURL
+- リンクはSupabase Authのメールテンプレート変数（`{{ .SiteURL }}`, `{{ .TokenHash }}`）で構成し、Supabase既定のホスト型検証URLではなく`apps/web`の`/verify-email`を直接指す形にカスタマイズする（5章参照）
 - HTML版のデザイン（ロゴ・ボタン化されたリンク等）は本草案では未定義。まずプレーンテキスト相当の内容で実装し、デザイン適用は別途
 - 送信元ドメインはResendでのドメイン認証（SPF/DKIM）が必要。ドメイン未確定のため実装時はResendのテストドメインで仮運用し、確定後に切り替える

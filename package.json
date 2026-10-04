@@ -1,22 +1,22 @@
 {
   "private": true,
   "name": "kintai-hub",
-  "packageManager": "yarn@4.15.0",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev": "yarn workspaces foreach --all --parallel --interlaced run dev",
-    "dev:web": "yarn workspace @kintai/web dev",
-    "dev:api": "yarn workspace @kintai/api dev",
-    "build": "yarn workspace @kintai/web build",
+    "dev": "concurrently --raw \"npm run dev -w @kintai/api\" \"npm run dev -w @kintai/web\"",
+    "dev:web": "npm run dev -w @kintai/web",
+    "dev:api": "npm run dev -w @kintai/api",
+    "build": "npm run build -w @kintai/web",
     "lint": "biome lint --write .",
     "format": "biome format --write .",
     "check": "biome check --write ."
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
-    "@types/node": "^25.9.1"
+    "@types/node": "^25.9.1",
+    "concurrently": "^9.2.4"
   }
 }

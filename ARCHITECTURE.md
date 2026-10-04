@@ -5,15 +5,15 @@
 ```
 /
 ├── apps/
-│   ├── web/          # Next.js 15 フロントエンド（Vercel）
-│   └── api/          # Hono.js バックエンドAPI（Render / App Runner）
+│   ├── web/          # Next.js 15 フロントエンド（Cloudflare Workers）
+│   └── api/          # Hono.js バックエンドAPI（Cloudflare Workers）
 ├── packages/
 │   ├── types/        # Zod スキーマ・TypeScript型定義（フロント・バック共通）
 │   ├── ui/           # shadcn/ui ベースの共通UIコンポーネント
 │   └── config/       # ESLint・TypeScript・Tailwindの共通設定
 ├── CLAUDE.md
 ├── ARCHITECTURE.md   # このファイル
-├── package.json      # yarn workspaces 設定
+├── package.json      # npm workspaces 設定
 └── docker-compose.yml
 ```
 

@@ -24,9 +24,9 @@ export default function SignupPage() {
 
   useEffect(() => {
     if (signUp.isSuccess) {
-      router.replace('/verify-email')
+      router.replace(`/verify-email?email=${encodeURIComponent(email)}`)
     }
-  }, [signUp.isSuccess, router])
+  }, [signUp.isSuccess, router, email])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

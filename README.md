@@ -11,7 +11,7 @@ SES業界向けクラウド型勤怠管理SaaS。
 | バックエンド | Hono.js / TypeScript / Drizzle ORM |
 | DB | PostgreSQL 16 |
 | キャッシュ | Redis 7 |
-| パッケージ管理 | yarn 4 (workspaces) |
+| パッケージ管理 | npm (workspaces) |
 
 ## ローカル開発環境のセットアップ
 
@@ -19,14 +19,13 @@ SES業界向けクラウド型勤怠管理SaaS。
 
 - [Node.js 22+](https://nodejs.org/) (Volta 推奨)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- [yarn 4](https://yarnpkg.com/)
 
 ### 手順
 
 **1. 依存パッケージのインストール**
 
 ```bash
-yarn install
+npm install
 ```
 
 **2. Docker でミドルウェアを起動**
@@ -51,7 +50,7 @@ DATABASE_URL=postgresql://kintai:kintai_pass@localhost:5432/kintai_hub
 **4. DBマイグレーションの適用**
 
 ```bash
-yarn workspace @kintai/api db:migrate
+npm run db:migrate -w @kintai/api
 ```
 
 `Migration complete` と表示されれば成功です。
@@ -60,11 +59,11 @@ yarn workspace @kintai/api db:migrate
 
 ```bash
 # API（ポート 3001）とフロントエンド（ポート 3000）を同時起動
-yarn dev
+npm run dev
 
 # 個別に起動する場合
-yarn dev:api   # APIのみ
-yarn dev:web   # フロントエンドのみ
+npm run dev:api   # APIのみ
+npm run dev:web   # フロントエンドのみ
 ```
 
 ブラウザで http://localhost:3000 を開いてください。
@@ -73,20 +72,20 @@ yarn dev:web   # フロントエンドのみ
 
 ```bash
 # スキーマ変更後に SQL ファイルを再生成
-yarn workspace @kintai/api db:generate
+npm run db:generate -w @kintai/api
 
 # マイグレーションを適用
-yarn workspace @kintai/api db:migrate
+npm run db:migrate -w @kintai/api
 
 # Drizzle Studio（ブラウザでDBの中身を確認）
-yarn workspace @kintai/api db:studio
+npm run db:studio -w @kintai/api
 ```
 
 ## コード品質
 
 ```bash
 # フォーマット・lint・import整列を一括実行
-yarn check
+npm run check
 ```
 
 ## プロジェクト構成

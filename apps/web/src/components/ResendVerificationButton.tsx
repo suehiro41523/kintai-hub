@@ -1,21 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError } from '@/lib/apiClient'
+import { supabase } from '@/lib/supabaseClient'
 
 type ResendState = 'idle' | 'resending' | 'resent'
 
 const COOLDOWN_SECONDS = 60
 
-export function ResendVerificationButton({
-  email,
-  callbackPath = '/verify-email',
-  onAlreadyVerified,
-}: {
-  email: string
-  callbackPath?: string
-  onAlreadyVerified?: () => void
-}) {
+export function ResendVerificationButton({ email }: { email: string }) {
   const [state, setState] = useState<ResendState>('idle')
   const [cooldown, setCooldown] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -31,20 +23,16 @@ export function ResendVerificationButton({
     setState('resending')
     setError(null)
     try {
-      await api.auth.resendVerificationEmail(email, `${window.location.origin}${callbackPath}`)
+      const { error: resendError } = await supabase.auth.resend({ type: 'signup', email })
+      if (resendError) throw resendError
       setState('resent')
       setCooldown(COOLDOWN_SECONDS)
-    } catch (err) {
-      if (err instanceof ApiError && err.code === 'EMAIL_ALREADY_VERIFIED') {
-        onAlreadyVerified?.()
-      } else if (err instanceof ApiError && err.status === 429) {
-        setError('しばらくしてから再度お試しください')
-      } else {
-        setError('送信に失敗しました。時間をおいて再度お試しください')
-      }
+    } catch {
+      setError('送信に失敗しました。時間をおいて再度お試しください')
       setState('idle')
+      setCooldown(COOLDOWN_SECONDS)
     }
-  }, [email, cooldown, callbackPath, onAlreadyVerified])
+  }, [email, cooldown])
 
   const disabled = state === 'resending' || cooldown > 0
   const label =

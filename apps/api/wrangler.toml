@@ -1,0 +1,30 @@
+name = "kintai-hub-api"
+main = "src/worker.ts"
+compatibility_date = "2026-09-29"
+compatibility_flags = ["nodejs_compat"]
+
+# 機密でない設定値。ここは平文でコミットして良い
+[vars]
+FRONTEND_URL = "http://localhost:3000"
+SUPABASE_URL = "https://fypnvhbbnknfeutdakpq.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5cG52aGJibmtuZmV1dGRha3BxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2Njc5NTcsImV4cCI6MjEwNjI0Mzk1N30.5lzmrv7T_RKoSN8t0QppUnpTi7dGHucnzmgVty2C1-o"
+UPSTASH_REDIS_REST_URL = "https://relevant-seahorse-318743.upstash.io"
+EMAIL_FROM = ""
+
+# 機密情報は wrangler.toml に書かず、以下のコマンドで1つずつ登録する（デプロイ先ごとに設定が必要）
+#   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   npx wrangler secret put RESEND_API_KEY
+#   npx wrangler secret put UPSTASH_REDIS_REST_TOKEN
+#   npx wrangler secret put STRIPE_SECRET_KEY
+#   npx wrangler secret put STRIPE_WEBHOOK_SECRET
+#   npx wrangler secret put STRIPE_PRICE_STANDARD
+#   npx wrangler secret put STRIPE_PRICE_PRO
+
+# `npx wrangler hyperdrive create kintai-hub-db --connection-string="<Neonの接続文字列>"`
+# の出力される id をここに貼る
+# localConnectionString: `wrangler dev`（ローカル実行）時だけ使われる。Cloudflareの本番Hyperdriveは
+# 経由せず、docker-composeのローカルPostgresに直接つなぐ
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "fae695ea986b4f0b870db37073d28cf1"
+localConnectionString = "postgresql://kintai:kintai_pass@localhost:5432/kintai_hub"

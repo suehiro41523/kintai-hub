@@ -10,7 +10,9 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:3001/api/:path*',
+        // 'localhost' はIPv6(::1)に解決される環境があり、WSL2等でループバック接続が失敗することがあるため
+        // 明示的にIPv4ループバックを指定する
+        destination: 'http://127.0.0.1:3001/api/:path*',
       },
     ]
   },

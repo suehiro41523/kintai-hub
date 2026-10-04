@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient'
+
 // ─── 型定義 ────────────────────────────────────────────────────────────────────
 // TODO: packages/types に移動する
 
@@ -143,7 +145,6 @@ export interface AuthUser {
   name: string
   email: string
   role: UserRole
-  emailVerified: boolean
 }
 
 export interface Tenant {
@@ -152,6 +153,16 @@ export interface Tenant {
   plan: string
   status: string
   maxUsers: number | null
+}
+
+export type PaidPlan = 'standard' | 'pro'
+
+export interface Subscription {
+  plan: string
+  status: string | null
+  currentPeriodEnd: string | null
+  billedSeats: number | null
+  hasStripeCustomer: boolean
 }
 
 export interface ShiftPattern {
@@ -215,14 +226,20 @@ export class ApiError extends Error {
 
 // ─── fetch ラッパー ────────────────────────────────────────────────────────────
 
-// 本番: NEXT_PUBLIC_API_URL=https://your-api.onrender.com（直接呼び出し）
+// 本番: NEXT_PUBLIC_API_URL=https://your-api-domain（直接呼び出し）
 // ローカル: 未設定 → 相対パス → next.config.ts の rewrite でプロキシ
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { data } = await supabase.auth.getSession()
+  const accessToken = data.session?.access_token
+
   const res = await fetch(`${BASE_URL}/api/v1${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...init?.headers,
+    },
     ...init,
   })
 
@@ -242,12 +259,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   auth: {
-    signIn: (email: string, password: string) =>
-      request<{ user: AuthUser }>('/auth/sign-in', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      }),
-
+    // サインイン・サインアウトはフロントエンドが直接Supabaseクライアントを呼ぶ（@/lib/supabaseClient）。
+    // ここに残るのはテナント作成を伴う sign-up と、tenantId/role取得の me のみ（AUTH-DESIGN.md参照）
     signUp: (data: {
       company_name: string
       name: string
@@ -260,15 +273,7 @@ export const api = {
         body: JSON.stringify(data),
       }),
 
-    signOut: () => request<{ success: boolean }>('/auth/sign-out', { method: 'POST' }),
-
     me: () => request<{ user: AuthUser }>('/auth/me'),
-
-    resendVerificationEmail: (email: string, callbackURL: string) =>
-      request<{ status: boolean }>('/auth/send-verification-email', {
-        method: 'POST',
-        body: JSON.stringify({ email, callbackURL }),
-      }),
   },
 
   workTypes: {
@@ -414,6 +419,24 @@ export const api = {
       request<{ report: MonthlyReport }>(`/reports/monthly?year=${year}&month=${month}`),
   },
 
+  subscription: {
+    get: () => request<{ subscription: Subscription }>('/subscription'),
+
+    checkout: (plan: PaidPlan, seats: number) =>
+      request<{ url: string }>('/subscription/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ plan, seats }),
+      }),
+
+    portal: () => request<{ url: string }>('/subscription/portal', { method: 'POST' }),
+
+    updateSeats: (seats: number) =>
+      request<{ success: boolean; billedSeats: number }>('/subscription/seats', {
+        method: 'PATCH',
+        body: JSON.stringify({ seats }),
+      }),
+  },
+
   users: {
     list: () => request<{ users: User[] }>('/users'),
 
@@ -424,7 +447,6 @@ export const api = {
       employmentType: EmploymentType
       hourlyRate?: number | null
       monthlySalary?: number | null
-      initialPassword: string
     }) =>
       request<{ user: User }>('/users', {
         method: 'POST',

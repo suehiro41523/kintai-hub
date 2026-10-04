@@ -1,21 +1,26 @@
 import { sql } from 'drizzle-orm'
 import { createMiddleware } from 'hono/factory'
 import { db } from '../db/index.js'
-import { findUserById } from '../db/queries/users.js'
-import { auth } from '../lib/auth.js'
+import { findUserByAuthUserId } from '../db/queries/users.js'
+import { verifyAccessToken } from '../lib/supabase.js'
 import type { AppEnv, Role } from '../types.js'
 
 const isValidRole = (role: string): role is Role =>
   role === 'admin' || role === 'manager' || role === 'employee'
 
 export const verifySession = createMiddleware<AppEnv>(async (c, next) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers })
-
-  if (!session?.user) {
+  const authHeader = c.req.header('Authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) {
     return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
   }
 
-  const coreUser = await findUserById(session.user.id)
+  const payload = await verifyAccessToken(token)
+  if (!payload) {
+    return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
+  }
+
+  const coreUser = await findUserByAuthUserId(payload.sub)
   if (!coreUser || !coreUser.isActive) {
     return c.json({ error: '認証が必要です', code: 'UNAUTHORIZED' }, 401)
   }

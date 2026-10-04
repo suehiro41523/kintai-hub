@@ -23,7 +23,7 @@
 │       ├── signup-page-design.md   # サインアップページ
 │       └── verify-email-design.md  # メール認証画面
 ├── docker-compose.yml
-├── package.json                # yarn workspaces 設定
+├── package.json                # npm workspaces 設定
 ├── CLAUDE.md
 ├── ARCHITECTURE.md
 ├── TECH-STACK.md

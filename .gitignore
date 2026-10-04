@@ -13,10 +13,10 @@ dist/
 build/
 *.tsbuildinfo
 
-# Yarn Berry
-.yarn/install-state.gz
-.yarn/cache
-
 # OS
 .DS_Store
 Thumbs.db
+
+# Cloudflare Wrangler
+.wrangler/
+.dev.vars*

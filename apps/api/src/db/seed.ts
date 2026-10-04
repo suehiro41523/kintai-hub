@@ -1,14 +1,22 @@
 import 'dotenv/config'
 import { randomUUID } from 'node:crypto'
-import { hashPassword } from 'better-auth/crypto'
+import { createClient } from '@supabase/supabase-js'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { authAccount, authUser } from './schema/auth.js'
 import { workTypes } from './schema/app.js'
 import { departments, tenants, users } from './schema/core.js'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is not set')
+
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+if (!supabaseUrl) throw new Error('SUPABASE_URL is not set')
+if (!supabaseServiceRoleKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set')
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+  auth: { autoRefreshToken: false, persistSession: false },
+})
 
 const client = postgres(databaseUrl, { max: 1 })
 const db = drizzle(client)
@@ -21,6 +29,33 @@ const ADMIN_PASSWORD = process.env.TEST_PASSWORD ?? 'password'
 const ADMIN_USER_ID = randomUUID()
 
 const now = new Date('2026-01-01')
+
+// Supabase Auth側にテストユーザーを作成する（email_confirm: trueでメール確認をスキップ）。
+// 再実行時は既に存在するため、メールアドレスで検索して既存ユーザーのidを使う（冪等性のため）
+async function ensureSupabaseTestUser(): Promise<string> {
+  const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
+    email: ADMIN_EMAIL,
+    password: ADMIN_PASSWORD,
+    email_confirm: true,
+  })
+  if (created?.user) return created.user.id
+
+  let page = 1
+  for (;;) {
+    const { data: listed, error: listError } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    })
+    if (listError) throw listError
+    const existingUser = listed.users.find((u) => u.email === ADMIN_EMAIL)
+    if (existingUser) return existingUser.id
+    if (listed.users.length < 200) break
+    page += 1
+  }
+  throw error ?? new Error(`Supabaseテストユーザーの作成に失敗しました: ${ADMIN_EMAIL}`)
+}
+
+const authUserId = await ensureSupabaseTestUser()
 
 await db.transaction(async (tx) => {
   // テナント
@@ -100,41 +135,14 @@ await db.transaction(async (tx) => {
     ])
     .onConflictDoNothing()
 
-  // Better Auth ユーザー（auth.user）
-  const hashedPwd = await hashPassword(ADMIN_PASSWORD)
-  await tx
-    .insert(authUser)
-    .values({
-      id: ADMIN_USER_ID,
-      name: '管理者',
-      email: ADMIN_EMAIL,
-      emailVerified: true,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoNothing()
-
-  // Better Auth アカウント（auth.account）
-  await tx
-    .insert(authAccount)
-    .values({
-      id: randomUUID(),
-      accountId: ADMIN_USER_ID,
-      providerId: 'credential',
-      userId: ADMIN_USER_ID,
-      password: hashedPwd,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoNothing()
-
-  // core.users（業務データ）
+  // core.users（業務データ）。Supabase Auth側のユーザー作成はトランザクション外で完了済み
   await tx
     .insert(users)
     .values({
       id: ADMIN_USER_ID,
       tenantId: TENANT_ID,
       departmentId: DEPT_ID,
+      authUserId,
       name: '管理者',
       email: ADMIN_EMAIL,
       role: 'admin',

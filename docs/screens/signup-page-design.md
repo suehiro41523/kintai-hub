@@ -1,14 +1,16 @@
 # signup-page-design.md — サインアップページ設計書
 
-> バージョン: 1.0 / 作成日: 2026-08-03 / ステータス: ドラフト
+> バージョン: 1.1 / 作成日: 2026-08-03 / 更新日: 2026-09-28 / ステータス: ドラフト
 > 対象パス: `/signup`（新規） / 関連: [top-page-design.md](./top-page-design.md) 5章, [api-spec.md](../api-spec.md) 1章
+
+> 2026-09-28更新: 認証ライブラリをBetter AuthからSupabase Authに変更（詳細は[AUTH-DESIGN.md](../../AUTH-DESIGN.md)）。`POST /auth/sign-up`のレスポンスから`session_token`が無くなった（サインアップ時点ではセッションを発行しない）ことに伴い、6章の送信フローと8章の遷移先を更新した。
 
 ---
 
 ## 0. 前提・スコープ
 
 - [top-page-design.md](./top-page-design.md) で定義した「無料で始める」CTAの遷移先。トップページ→本画面→メール認証→ダッシュボードという **セルフサーブ登録フロー** の入口を担う。
-- 呼び出すAPIは `api-spec.md` に既に定義済みの `POST /auth/sign-up`（`name, email, password, company_name, plan` → `{ user, tenant, session_token }`）をそのまま利用する。新規エンドポイントの追加は不要。
+- 呼び出すAPIは `api-spec.md` に既に定義済みの `POST /auth/sign-up`（`name, email, password, company_name, plan` → `{ user, tenant }`）をそのまま利用する。新規エンドポイントの追加は不要。**Supabase Auth採用に伴い、サインアップ時点ではセッションを発行しない**（詳細は[AUTH-DESIGN.md](../../AUTH-DESIGN.md)）。
 - 料金プラン選択UIは[top-page-design.md 今後の検討事項](./top-page-design.md#8-今後の検討事項未確定)で「今回スコープ外」と決定済みのため、本画面でも **プラン選択UIは表示しない**。`plan` は `'free'` を固定値としてリクエストに含める。
 - デザイントーンは `/login`（`apps/web/src/app/login/page.tsx`）を踏襲し、テナント管理者候補が迷わず離脱しない最短フォームとする。
 
@@ -81,12 +83,12 @@
 | 1 | 会社名 | text | ○ | `company_name` → `core.tenants.name` | 株式会社サンプル |
 | 2 | お名前 | text | ○ | `name` → `core.users.name` | 山田 太郎 |
 | 3 | メールアドレス | email | ○ | `email` → `core.users.email`（ログインID） | admin@example.com |
-| 4 | パスワード | password | ○ | `password`（Better Auth経由） | 8文字以上 |
+| 4 | パスワード | password | ○ | `password`（Supabase Auth経由） | 8文字以上 |
 | 5 | パスワード（確認） | password | ○ | フロントのみ（API送信なし・一致検証用） | — |
 | 6 | 利用規約同意 | checkbox | ○ | フロントのみ（API送信なし・送信ボタン活性化条件） | — |
 | （非表示固定値） | プラン | — | — | `plan = 'free'`（UI非表示、送信時に固定付与） | — |
 
-`role='admin'` はAPIサーバー側で完全固定（確定仕様）。サインアップ経由で作成される最初のユーザーは常にそのテナントの管理者として `role='admin'` が付与され、リクエストに `role` 相当のパラメータが含まれていてもサーバー側で無視する。フロントからは送信しない（`api-spec.md`のレスポンス例 `{ user, tenant, session_token }` の `user.role` は常に `admin` になる）。実装方式（テナント作成とのトランザクション制御を含む）は [AUTH-DESIGN.md](../../AUTH-DESIGN.md) の「サインアップフロー」章で確定済み。
+`role='admin'` はAPIサーバー側で完全固定（確定仕様）。サインアップ経由で作成される最初のユーザーは常にそのテナントの管理者として `role='admin'` が付与され、リクエストに `role` 相当のパラメータが含まれていてもサーバー側で無視する。フロントからは送信しない（`api-spec.md`のレスポンス例 `{ user, tenant }` の `user.role` は常に `admin` になる）。実装方式（テナント作成とのトランザクション制御を含む）は [AUTH-DESIGN.md](../../AUTH-DESIGN.md) の「サインアップフロー」章で確定済み。
 
 ---
 
@@ -99,7 +101,7 @@
 | 会社名 | 1〜255文字（`core.tenants.name` は VARCHAR(255)） | 「会社名を入力してください」/「255文字以内で入力してください」 |
 | お名前 | 1〜100文字（`core.users.name` は VARCHAR(100)） | 「お名前を入力してください」 |
 | メールアドレス | email形式 / 255文字以内 | 「メールアドレスの形式が正しくありません」 |
-| パスワード | 8文字以上、大文字・記号を各1文字以上含む（確定。招待フロー`POST /users`の`initialPassword`も同様に強化） | 「パスワードは8文字以上、大文字と記号を1文字以上含めてください」 |
+| パスワード | 8文字以上、大文字・記号を各1文字以上含む（確定） | 「パスワードは8文字以上、大文字と記号を1文字以上含めてください」 |
 | パスワード（確認） | パスワードと一致 | 「パスワードが一致しません」 |
 | 利用規約同意 | チェック必須 | 「利用規約とプライバシーポリシーへの同意が必要です」（送信ボタンはチェックまで非活性） |
 
@@ -128,9 +130,10 @@ POST /api/v1/auth/sign-up
   { company_name, name, email, password, plan: 'free' }
    ↓（失敗）5章のエラーハンドリングに従い表示、ボタンを再活性化
    ↓（成功）
-{ user, tenant, session_token } を受信
+{ user, tenant } を受信（Supabase Auth採用によりセッションは発行されない。詳細は[AUTH-DESIGN.md](../../AUTH-DESIGN.md)）
    ↓
-router.replace('/verify-email') へ遷移
+router.replace(`/verify-email?email=${encodeURIComponent(email)}`) へ遷移
+   （待機画面はセッションに依存せずemailをクエリから表示する。詳細は[verify-email-design.md](./verify-email-design.md)）
 ```
 
 - 既存 `useSignIn`（`apps/web/src/hooks/useAuth.ts`）に倣い、`useSignUp` フックを新設して TanStack Query の `useMutation` でラップする。
@@ -191,5 +194,5 @@ router.replace('/verify-email') へ遷移
 
 - `role='admin'` はサーバー側で完全固定する仕様として確定（4章に反映、実装方式は[AUTH-DESIGN.md](../../AUTH-DESIGN.md)参照）
 - `/verify-email` の詳細設計 → [verify-email-design.md](./verify-email-design.md) として作成済み
-- パスワードポリシー：8文字以上＋大文字・記号を各1文字以上必須（5章に反映。既存の招待フロー`initialPassword`も同ルールに統一）
+- パスワードポリシー：8文字以上＋大文字・記号を各1文字以上必須（5章に反映）。招待フローはSupabase Auth（`inviteUserByEmail`）に委譲するため、本ポリシーの対象は本画面のみ（詳細は[AUTH-DESIGN.md](../../AUTH-DESIGN.md)招待フロー章）
 - サインアップ時点のBot対策：Upstash Redisによるレート制限のみ実装（`api-spec.md`共通仕様の10req/minに準拠）。reCAPTCHA等の外部サービス導入は見送り、乱用が確認された場合に再検討する

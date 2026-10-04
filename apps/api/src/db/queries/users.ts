@@ -32,6 +32,11 @@ export async function findUserById(id: string): Promise<MappedUser | null> {
   return row ? mapUser(row) : null
 }
 
+export async function findUserByAuthUserId(authUserId: string): Promise<MappedUser | null> {
+  const [row] = await db.select().from(users).where(eq(users.authUserId, authUserId))
+  return row ? mapUser(row) : null
+}
+
 export async function listUsers(tenantId: string): Promise<MappedUser[]> {
   const rows = await db
     .select()
@@ -52,6 +57,7 @@ export async function findUser(tenantId: string, id: string): Promise<MappedUser
 export type CreateUserData = {
   id?: string
   tenantId: string
+  authUserId: string
   name: string
   email: string
   role: string
@@ -66,6 +72,7 @@ export async function createUser(data: CreateUserData): Promise<MappedUser> {
     .values({
       id: data.id ?? randomUUID(),
       tenantId: data.tenantId,
+      authUserId: data.authUserId,
       name: data.name,
       email: data.email,
       role: data.role,

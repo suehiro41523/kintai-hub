@@ -4,6 +4,7 @@ import {
   BarChart2,
   Calendar,
   Clock,
+  CreditCard,
   DollarSign,
   FileText,
   History,
@@ -36,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
 const SETTINGS_ITEMS: NavItem[] = [
   { href: '/settings/users', icon: Users, label: '従業員管理', roles: ['admin'] },
   { href: '/settings/work-types', icon: Settings, label: '設定', roles: ['admin'] },
+  { href: '/settings/subscription', icon: CreditCard, label: 'プラン・お支払い', roles: ['admin'] },
 ]
 
 interface SidebarProps {

@@ -21,10 +21,25 @@ export const tenants = coreSchema.table(
     plan: varchar('plan', { length: 50 }).notNull(),
     status: varchar('status', { length: 50 }).notNull(),
     maxUsers: integer('max_users'),
+    // Stripeサブスクリプション連携（2026-09-22追加）。
+    // サインアップ時点では全カラムnull（plan='free'はStripe未経由）。
+    // ダッシュボードの「プラン変更」でCheckoutを通過した時点でstripeCustomerIdが確定する。
+    stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
+    stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }),
+    stripePriceId: varchar('stripe_price_id', { length: 255 }),
+    // Stripeのsubscription.statusをそのまま保持する（trialing/active/past_due/canceled/unpaid等）
+    subscriptionStatus: varchar('subscription_status', { length: 50 }),
+    currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    // 人数課金プラン（standard/pro）の契約人数。Stripe側のsubscription item quantityと管理画面から手動で同期する
+    billedSeats: integer('billed_seats'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('idx_tenants_status').on(t.status), index('idx_tenants_plan').on(t.plan)],
+  (t) => [
+    index('idx_tenants_status').on(t.status),
+    index('idx_tenants_plan').on(t.plan),
+    index('idx_tenants_stripe_customer_id').on(t.stripeCustomerId),
+  ],
 )
 
 // ─── core.departments ─────────────────────────────────────────────────────────
@@ -57,6 +72,9 @@ export const users = coreSchema.table(
       .notNull()
       .references(() => tenants.id),
     departmentId: uuid('department_id').references(() => departments.id),
+    // Supabase Auth側(auth.users)のユーザーIDへの参照。認証情報はSupabase側が持つため、
+    // ここはリンクのみ(外部スキーマのため drizzle の references() は使わない)
+    authUserId: uuid('auth_user_id').notNull().unique(),
     name: varchar('name', { length: 100 }).notNull(),
     email: varchar('email', { length: 255 }).notNull().unique(),
     role: varchar('role', { length: 50 }).notNull(),
@@ -71,5 +89,6 @@ export const users = coreSchema.table(
     index('idx_users_tenant_id').on(t.tenantId),
     index('idx_users_email').on(t.email),
     index('idx_users_tenant_role').on(t.tenantId, t.role),
+    index('idx_users_auth_user_id').on(t.authUserId),
   ],
 )
