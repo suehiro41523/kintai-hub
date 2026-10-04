@@ -1,0 +1,17 @@
+# テキストファイルはリポジトリ内では常にLFで統一する。
+# Windows側のcore.autocrlf設定に関わらず、チェックアウト時もLFのままにする
+# (CRLFだと1行変更しただけで全行差分になり、git diff/statusが使えなくなるため)
+* text=auto eol=lf
+
+# バイナリファイルは改行変換の対象外にする(将来追加される想定の拡張子を先に明示)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
