@@ -36,7 +36,11 @@ app.use('*', async (c, next) => {
 app.use(
   '*',
   cors({
-    origin: [(process.env.FRONTEND_URL ?? '').replace(/\/$/, '')],
+    // FRONTEND_URLはカンマ区切りで複数オリジンを指定できる(例: Next.js開発サーバーとwrangler dev)
+    origin: (process.env.FRONTEND_URL ?? '')
+      .split(',')
+      .map((url) => url.trim().replace(/\/$/, ''))
+      .filter((url) => url !== ''),
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
