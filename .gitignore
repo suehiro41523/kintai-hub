@@ -20,3 +20,4 @@ Thumbs.db
 # Cloudflare Wrangler
 .wrangler/
 .dev.vars*
+.open-next/

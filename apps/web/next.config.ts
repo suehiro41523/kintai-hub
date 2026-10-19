@@ -1,9 +1,10 @@
+import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare'
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   async rewrites() {
     // NEXT_PUBLIC_API_URL が設定されている場合は本番環境 → rewrite 不要（直接 API を呼ぶ）
-    // 未設定の場合はローカル開発 → Next.js 経由でプロキシして Cookie 問題を回避
+    // 未設定の場合はローカル開発 → Next.js 経由でプロキシする
     if (process.env.NEXT_PUBLIC_API_URL) {
       return []
     }
@@ -17,5 +18,9 @@ const nextConfig: NextConfig = {
     ]
   },
 }
+
+// Cloudflare Workersのバインディング(今はapps/webに無いが将来のため)に`next dev`からアクセスできるようにする。
+// ローカル開発の挙動自体は変えない(詳細はTECH-STACK.md「Cloudflareへの移行に伴うランタイム変更」参照)
+initOpenNextCloudflareForDev()
 
 export default nextConfig
