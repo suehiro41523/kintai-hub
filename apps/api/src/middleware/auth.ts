@@ -1,6 +1,6 @@
-import { sql } from 'drizzle-orm'
+import { TransactionRollbackError } from 'drizzle-orm'
 import { createMiddleware } from 'hono/factory'
-import { db } from '../db/index.js'
+import { withTenantTransaction } from '../db/index.js'
 import { findUserByAuthUserId } from '../db/queries/users.js'
 import { verifyAccessToken } from '../lib/supabase.js'
 import type { AppEnv, Role } from '../types.js'
@@ -41,8 +41,16 @@ export const injectTenantContext = createMiddleware<AppEnv>(async (c, next) => {
   if (!tenantId) {
     return c.json({ error: 'Forbidden', code: 'FORBIDDEN' }, 403)
   }
-  await db.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
-  await next()
+  try {
+    await withTenantTransaction(tenantId, async (tx) => {
+      await next()
+      // Honoはハンドラーの例外をonErrorで処理してから next() を正常に返すため、
+      // ここで例外の有無を見てロールバックしないと、途中までの書き込みがコミットされてしまう
+      if (c.error) tx.rollback()
+    })
+  } catch (err) {
+    if (!(err instanceof TransactionRollbackError)) throw err
+  }
 })
 
 export const requireRole = (...roles: Role[]) =>
