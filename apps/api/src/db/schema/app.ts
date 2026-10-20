@@ -148,6 +148,10 @@ export const requests = appSchema.table(
 
 export const requestApprovals = appSchema.table('request_approvals', {
   id: uuid('id').primaryKey(),
+  // RLSでテナント分離するために requests から複製して持つ
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
   requestId: uuid('request_id')
     .notNull()
     .references(() => requests.id),
@@ -186,6 +190,10 @@ export const billingContracts = appSchema.table('billing_contracts', {
 
 export const billingContractMembers = appSchema.table('billing_contract_members', {
   id: uuid('id').primaryKey(),
+  // RLSでテナント分離するために billing_contracts から複製して持つ
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
   contractId: uuid('contract_id')
     .notNull()
     .references(() => billingContracts.id),
@@ -202,6 +210,10 @@ export const billingSummaries = appSchema.table(
   'billing_summaries',
   {
     id: uuid('id').primaryKey(),
+    // RLSでテナント分離するために billing_contracts から複製して持つ
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     contractId: uuid('contract_id')
       .notNull()
       .references(() => billingContracts.id),
