@@ -1,5 +1,17 @@
 # TESTING.md — テスト規約
 
+## テストの実行（apps/api）
+
+```bash
+docker compose up -d        # PostgreSQLを起動
+npm run test -w @kintai/api
+```
+
+- テストは開発用DB（`kintai_hub`）とは別の `kintai_hub_test` を使う。初回実行時に自動で作成され、毎回マイグレーションが最新まで適用される（`src/test/global-setup.ts`）
+- 接続先は `TEST_DATABASE_URL` で変更できる。誤って開発用・本番用DBに書き込まないよう、DB名が `_test` で終わらないとエラーになる
+- Supabase Authには接続しない。`src/test/setup.ts` で `verifyAccessToken` をモックしており、`core.users.auth_user_id` の値をそのままBearerトークンに指定すると、そのユーザーとして認証される
+- テストデータは `createTestTenant()`（`src/test/helpers.ts`）でテストごとに新しいテナントを作って分離する。admin・manager・employeeの3ユーザーと、精算契約・下書きサマリーを1件ずつ持つ
+
 ## テストファイルの配置
 
 ソースファイルと同じディレクトリに `.test.ts` で配置します。

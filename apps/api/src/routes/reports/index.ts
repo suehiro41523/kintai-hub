@@ -30,7 +30,10 @@ export const reportsRouter = new Hono<AppEnv>().get(
     }
 
     const userId = role === 'employee' ? c.get('userId') : undefined
-    const report = await getMonthlyReport(tenantId, year, month, userId)
+    const report = await getMonthlyReport(tenantId, year, month, {
+      userId,
+      includeBilling: role === 'admin',
+    })
     return c.json({ report })
   },
 )

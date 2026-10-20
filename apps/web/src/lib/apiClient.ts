@@ -136,7 +136,8 @@ export interface MonthlyReport {
   billableHours: number
   nonBillableHours: number
   workTypeBreakdown: WorkTypeHours[]
-  billingBreakdown: BillingBreakdown[]
+  /** 契約別の精算内訳。取引先名・精算額を含むため、admin以外のユーザーにはAPIが返さない */
+  billingBreakdown?: BillingBreakdown[]
 }
 
 export interface AuthUser {

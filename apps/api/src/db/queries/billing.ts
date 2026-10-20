@@ -368,19 +368,30 @@ export async function calculateBillingSummary(
 }
 
 export async function confirmBillingSummary(
+  tenantId: string,
   id: string,
 ): Promise<MappedBillingSummary | 'not_found' | 'already_confirmed'> {
+  // billing_summariesはtenant_idを持たないため、契約経由で自テナントのサマリーに限定する
+  const tenantContractIds = db
+    .select({ id: billingContracts.id })
+    .from(billingContracts)
+    .where(eq(billingContracts.tenantId, tenantId))
+
   const [existing] = await db
     .select()
     .from(billingSummaries)
-    .where(eq(billingSummaries.id, id))
+    .where(
+      and(eq(billingSummaries.id, id), inArray(billingSummaries.contractId, tenantContractIds)),
+    )
   if (!existing) return 'not_found'
   if (existing.status === 'confirmed') return 'already_confirmed'
 
   const [row] = await db
     .update(billingSummaries)
     .set({ status: 'confirmed', confirmedAt: new Date() })
-    .where(eq(billingSummaries.id, id))
+    .where(
+      and(eq(billingSummaries.id, id), inArray(billingSummaries.contractId, tenantContractIds)),
+    )
     .returning()
   return mapSummary(row)
 }
