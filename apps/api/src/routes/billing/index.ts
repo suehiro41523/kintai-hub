@@ -44,7 +44,7 @@ export const billingRouter = new Hono<AppEnv>()
 
   // ─── 契約 ───────────────────────────────────────────────────────────────────
 
-  .get('/contracts', verifySession, injectTenantContext, requireRole('manager', 'admin'), async (c) => {
+  .get('/contracts', verifySession, injectTenantContext, requireRole('admin'), async (c) => {
     const tenantId = c.get('tenantId')
     const contracts = await listBillingContracts(tenantId)
     return c.json({ contracts })
@@ -65,7 +65,7 @@ export const billingRouter = new Hono<AppEnv>()
     },
   )
 
-  .get('/contracts/:id', verifySession, injectTenantContext, requireRole('manager', 'admin'), async (c) => {
+  .get('/contracts/:id', verifySession, injectTenantContext, requireRole('admin'), async (c) => {
     const id = c.req.param('id')
     const tenantId = c.get('tenantId')
     const contract = await findBillingContract(tenantId, id)
@@ -113,7 +113,7 @@ export const billingRouter = new Hono<AppEnv>()
 
   // ─── サマリー ────────────────────────────────────────────────────────────────
 
-  .get('/summaries', verifySession, injectTenantContext, requireRole('manager', 'admin'), async (c) => {
+  .get('/summaries', verifySession, injectTenantContext, requireRole('admin'), async (c) => {
     const tenantId = c.get('tenantId')
     const yearStr = c.req.query('year')
     const monthStr = c.req.query('month')
@@ -153,7 +153,7 @@ export const billingRouter = new Hono<AppEnv>()
   .post('/summaries/:id/confirm', verifySession, injectTenantContext, requireRole('admin'), async (c) => {
     const id = c.req.param('id')
     const tenantId = c.get('tenantId')
-    const result = await confirmBillingSummary(id)
+    const result = await confirmBillingSummary(tenantId, id)
     if (result === 'not_found') {
       return c.json({ error: 'サマリーが見つかりません', code: 'NOT_FOUND' }, 404)
     }

@@ -179,6 +179,7 @@ export default function ReportsPage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
 
   const { data: report, isLoading } = useMonthlyReport(year, month)
+  const billingBreakdown = report?.billingBreakdown
 
   const currentYear = now.getFullYear()
   const currentMonth = now.getMonth() + 1
@@ -255,25 +256,25 @@ export default function ReportsPage() {
                   : undefined
               }
             />
-            <div className="col-span-2">
-              <SummaryCard
-                icon={<DollarSign className="h-4 w-4 text-amber-500" />}
-                label="請求合計（確定分）"
-                value={formatAmount(
-                  report.billingBreakdown
-                    .filter((b) => b.status === 'confirmed' && b.billingAmount !== null)
-                    .reduce((sum, b) => sum + (b.billingAmount ?? 0), 0),
-                )}
-                sub={
-                  report.billingBreakdown.some(
-                    (b) => b.status === 'draft' && b.billingAmount !== null,
-                  )
-                    ? `下書き含む合計 ${formatAmount(report.billingBreakdown.filter((b) => b.billingAmount !== null).reduce((sum, b) => sum + (b.billingAmount ?? 0), 0))}`
-                    : undefined
-                }
-                accent="text-amber-700"
-              />
-            </div>
+            {billingBreakdown && (
+              <div className="col-span-2">
+                <SummaryCard
+                  icon={<DollarSign className="h-4 w-4 text-amber-500" />}
+                  label="請求合計（確定分）"
+                  value={formatAmount(
+                    billingBreakdown
+                      .filter((b) => b.status === 'confirmed' && b.billingAmount !== null)
+                      .reduce((sum, b) => sum + (b.billingAmount ?? 0), 0),
+                  )}
+                  sub={
+                    billingBreakdown.some((b) => b.status === 'draft' && b.billingAmount !== null)
+                      ? `下書き含む合計 ${formatAmount(billingBreakdown.filter((b) => b.billingAmount !== null).reduce((sum, b) => sum + (b.billingAmount ?? 0), 0))}`
+                      : undefined
+                  }
+                  accent="text-amber-700"
+                />
+              </div>
+            )}
           </div>
 
           {/* ワークタイプ別内訳 */}
@@ -283,10 +284,12 @@ export default function ReportsPage() {
           </div>
 
           {/* 契約別精算内訳 */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h2 className="text-sm font-semibold text-gray-900 mb-4">契約別精算内訳</h2>
-            <BillingBreakdownSection items={report.billingBreakdown} />
-          </div>
+          {billingBreakdown && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <h2 className="text-sm font-semibold text-gray-900 mb-4">契約別精算内訳</h2>
+              <BillingBreakdownSection items={billingBreakdown} />
+            </div>
+          )}
         </>
       ) : null}
     </div>

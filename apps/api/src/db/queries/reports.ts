@@ -33,7 +33,11 @@ export interface MonthlyReport {
   billableHours: number
   nonBillableHours: number
   workTypeBreakdown: WorkTypeHours[]
-  billingBreakdown: BillingBreakdown[]
+  /**
+   * 契約別の精算内訳。取引先名・精算額を含むため、admin向けのレポートにだけ含める
+   * （docs/api-spec.md で精算APIはadmin専用と定めているのに合わせる）
+   */
+  billingBreakdown?: BillingBreakdown[]
 }
 
 // ─── 稼働時間の集計（全ワークタイプ一括） ──────────────────────────────────────
@@ -87,12 +91,13 @@ export async function getMonthlyReport(
   tenantId: string,
   year: number,
   month: number,
-  userId?: string,
+  options: { userId?: string; includeBilling: boolean },
 ): Promise<MonthlyReport> {
+  const { userId, includeBilling } = options
   const from = new Date(Date.UTC(year, month - 1, 1))
   const to = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999))
 
-  // ワークタイプ・打刻レコード・契約・サマリーを並列取得
+  // ワークタイプ・打刻レコード・契約を並列取得（契約は精算内訳を含める場合のみ）
   const [wts, records, contracts] = await Promise.all([
     db
       .select()
@@ -114,7 +119,9 @@ export async function getMonthlyReport(
         ),
       )
       .orderBy(asc(timeRecords.workTypeId), asc(timeRecords.clockedAt)),
-    db.select().from(billingContracts).where(eq(billingContracts.tenantId, tenantId)),
+    includeBilling
+      ? db.select().from(billingContracts).where(eq(billingContracts.tenantId, tenantId))
+      : Promise.resolve([]),
   ])
 
   // 契約に紐づくサマリーを取得
@@ -191,6 +198,6 @@ export async function getMonthlyReport(
     billableHours: Math.round(billableHours * 100) / 100,
     nonBillableHours: Math.round((totalHours - billableHours) * 100) / 100,
     workTypeBreakdown,
-    billingBreakdown,
+    ...(includeBilling ? { billingBreakdown } : {}),
   }
 }
