@@ -88,6 +88,9 @@ CREATE POLICY tenant_isolation ON app.time_records
 ```
 
 - `app.tenant_id` が未設定のときは条件がNULLになり、1行も返らない（エラーにはしない）
+  - RLSはアプリ側の `WHERE tenant_id` が漏れたときの保険なので、DB側は「漏らさない」方向に倒れれば十分（fail-closed）
+  - `current_setting` は、そのセッションで一度も設定されていなければ `NULL`、プール内で過去に `set_config(..., true)` されたコネクションでは `''` を返す。DB側でエラーにしようとするとコネクションの状態で挙動が変わるため、`NULLIF` で両方を `NULL` に揃えている
+  - その代わり、呼び出し側のバグ（tenantIdの渡し忘れ・空文字など）は `withTenantTransaction` の入口でtenantIdがUUID形式かを検証し、アプリ側の例外として検知する
 - `WITH CHECK` により、他テナントの `tenant_id` を指定したINSERT/UPDATEも拒否される
 - `billing_summaries`・`billing_contract_members`・`request_approvals` は本来親テーブル経由でテナントが決まるが、RLSで直接判定できるよう `tenant_id` を複製して持つ
 

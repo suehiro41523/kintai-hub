@@ -70,4 +70,10 @@ describe('RLSによるテナント分離', () => {
 
     expect(rows).toEqual([])
   })
+
+  it.each(['', 'not-a-uuid'])('tenantIdがUUIDの形式でない場合(%j)は、クエリを実行せず例外にする', async (tenantId) => {
+    await expect(withTenantTransaction(tenantId, () => db.select().from(workTypes))).rejects.toThrow(
+      'tenantIdがUUIDの形式ではありません',
+    )
+  })
 })

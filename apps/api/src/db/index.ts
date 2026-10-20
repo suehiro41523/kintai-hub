@@ -28,6 +28,8 @@ function requireDb(): Db {
   return instance
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // withTenantTransaction の実行中は、そのトランザクションを保持する
 const tenantTxStorage = new AsyncLocalStorage<Tx>()
 
@@ -48,7 +50,11 @@ export const db: Db = new Proxy({} as Db, {
 // クエリ全体を同じトランザクションに入れないとRLSのテナント条件が効かない。
 // また接続ユーザー(スーパーユーザーやテーブル所有者)はRLSを無視するため、
 // RLS適用対象のロール kintai_app に切り替える(AUTH-DESIGN.md「RLSポリシー」参照)
-export function withTenantTransaction<T>(tenantId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+export async function withTenantTransaction<T>(tenantId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  // 不正なtenantIdでもRLSは0行を返すだけでエラーにならないため、呼び出し側のバグをここで例外にして気づけるようにする
+  if (!UUID_PATTERN.test(tenantId)) {
+    throw new Error(`tenantIdがUUIDの形式ではありません: "${tenantId}"`)
+  }
   return requireDb().transaction(async (tx) => {
     await tx.execute(sql`SET LOCAL ROLE kintai_app`)
     await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
