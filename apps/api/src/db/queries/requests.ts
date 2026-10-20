@@ -100,6 +100,7 @@ export async function approveRequest(
   const [updated] = await db.transaction(async (tx) => {
     await tx.insert(requestApprovals).values({
       id: randomUUID(),
+      tenantId,
       requestId,
       approverId,
       step: 1,
@@ -129,6 +130,7 @@ export async function rejectRequest(
   const [updated] = await db.transaction(async (tx) => {
     await tx.insert(requestApprovals).values({
       id: randomUUID(),
+      tenantId,
       requestId,
       approverId,
       step: 1,
