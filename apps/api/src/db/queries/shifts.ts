@@ -189,6 +189,9 @@ export async function upsertShifts(
 
   const valid = await findValidReferenceIds(tenantId, items)
 
+  // PostgreSQLはトランザクション内で1つでもSQLが失敗するとトランザクション全体がabortし、以降のSQLもすべて失敗する。
+  // 失敗した行だけを errors に入れて他の行の登録を続けるため、行ごとにsavepoint(ネストしたトランザクション)で囲み、
+  // 失敗した行はそのsavepointまでロールバックする
   await db.transaction(async (tx) => {
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
@@ -198,31 +201,33 @@ export async function upsertShifts(
         continue
       }
       try {
-        const [existing] = await tx
-          .select()
-          .from(shifts)
-          .where(
-            and(
-              eq(shifts.tenantId, tenantId),
-              eq(shifts.userId, item.userId),
-              eq(shifts.shiftDate, item.shiftDate),
-            ),
-          )
+        const result = await tx.transaction(async (sp) => {
+          const [existing] = await sp
+            .select()
+            .from(shifts)
+            .where(
+              and(
+                eq(shifts.tenantId, tenantId),
+                eq(shifts.userId, item.userId),
+                eq(shifts.shiftDate, item.shiftDate),
+              ),
+            )
 
-        if (existing) {
-          const [row] = await tx
-            .update(shifts)
-            .set({
-              startTime: item.startTime,
-              endTime: item.endTime,
-              workTypeId: item.workTypeId ?? null,
-              shiftPatternId: item.shiftPatternId ?? null,
-            })
-            .where(eq(shifts.id, existing.id))
-            .returning()
-          updated.push(row)
-        } else {
-          const [row] = await tx
+          if (existing) {
+            const [row] = await sp
+              .update(shifts)
+              .set({
+                startTime: item.startTime,
+                endTime: item.endTime,
+                workTypeId: item.workTypeId ?? null,
+                shiftPatternId: item.shiftPatternId ?? null,
+              })
+              .where(and(eq(shifts.id, existing.id), eq(shifts.tenantId, tenantId)))
+              .returning()
+            return { kind: 'updated' as const, row }
+          }
+
+          const [row] = await sp
             .insert(shifts)
             .values({
               id: randomUUID(),
@@ -237,8 +242,11 @@ export async function upsertShifts(
               createdBy,
             })
             .returning()
-          created.push(row)
-        }
+          return { kind: 'created' as const, row }
+        })
+        // savepointが確定してから結果に入れる(ロールバックされた行を created/updated に含めない)
+        if (result.kind === 'created') created.push(result.row)
+        else updated.push(result.row)
       } catch {
         errors.push({ index: i, message: '登録に失敗しました' })
       }
