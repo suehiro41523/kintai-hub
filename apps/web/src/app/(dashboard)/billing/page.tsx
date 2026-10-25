@@ -327,7 +327,7 @@ function ContractForm({
 
 // ─── 契約タブ ─────────────────────────────────────────────────────────────────
 
-function ContractsTab({ workTypes, isAdmin }: { workTypes: WorkType[]; isAdmin: boolean }) {
+function ContractsTab({ workTypes }: { workTypes: WorkType[] }) {
   const { data: contracts = [], isLoading } = useBillingContracts()
   const createMut = useCreateBillingContract()
   const updateMut = useUpdateBillingContract()
@@ -405,18 +405,16 @@ function ContractsTab({ workTypes, isAdmin }: { workTypes: WorkType[]; isAdmin: 
 
   return (
     <div className="space-y-4">
-      {isAdmin && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={openCreate}
-            className="flex items-center gap-2 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            契約を追加
-          </button>
-        </div>
-      )}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={openCreate}
+          className="flex items-center gap-2 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          契約を追加
+        </button>
+      </div>
 
       {contracts.length === 0 && !form && (
         <div className="text-center py-16 text-gray-400 text-sm">
@@ -491,32 +489,30 @@ function ContractsTab({ workTypes, isAdmin }: { workTypes: WorkType[]; isAdmin: 
                       `¥${formatAmount(c.baseAmount)}/月`}
                   </p>
                 </div>
-                {isAdmin && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(c)}
-                      className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                    >
-                      編集
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteId(c.id)}
-                      className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
-                      aria-label="削除"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(c)}
+                    className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                  >
+                    編集
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteId(c.id)}
+                    className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
+                    aria-label="削除"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
         ))}
       </div>
 
-      {isAdmin && form && !form.id && (
+      {form && !form.id && (
         <div className="bg-white rounded-xl border border-blue-200 p-4">
           <p className="text-sm font-medium text-gray-900 mb-4">新規契約</p>
           <ContractForm
@@ -590,7 +586,7 @@ function ContractsTab({ workTypes, isAdmin }: { workTypes: WorkType[]; isAdmin: 
 
 // ─── 精算タブ ─────────────────────────────────────────────────────────────────
 
-function SummariesTab({ workTypes, isAdmin }: { workTypes: WorkType[]; isAdmin: boolean }) {
+function SummariesTab({ workTypes }: { workTypes: WorkType[] }) {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -701,7 +697,7 @@ function SummariesTab({ workTypes, isAdmin }: { workTypes: WorkType[]; isAdmin: 
                     </p>
                   </div>
 
-                  {isAdmin && !confirmed && (
+                  {!confirmed && (
                     <button
                       type="button"
                       onClick={() => calculateMut.mutate({ contractId: c.id, year, month })}
@@ -757,7 +753,7 @@ function SummariesTab({ workTypes, isAdmin }: { workTypes: WorkType[]; isAdmin: 
                           ¥{summary.billingAmount.toLocaleString('ja-JP')}
                         </span>
                       </div>
-                      {isAdmin && !confirmed && (
+                      {!confirmed && (
                         <button
                           type="button"
                           onClick={() => confirmMut.mutate({ summaryId: summary.id, year, month })}
@@ -799,13 +795,12 @@ export default function BillingPage() {
   const { data: workTypesData, isLoading: wtLoading } = useWorkTypes()
   const workTypes = workTypesData?.workTypes ?? []
 
+  // 精算・請求APIはadmin専用(#18)。manager・employeeはAPIを呼ぶ前にリダイレクトする
   useEffect(() => {
-    if (me && me.role === 'employee') router.replace('/clock')
+    if (me && me.role !== 'admin') router.replace('/clock')
   }, [me, router])
 
-  if (!me || me.role === 'employee') return null
-
-  const isAdmin = me.role === 'admin'
+  if (!me || me.role !== 'admin') return null
 
   if (wtLoading) {
     return (
@@ -841,9 +836,9 @@ export default function BillingPage() {
       </div>
 
       {tab === 'summaries' ? (
-        <SummariesTab workTypes={workTypes} isAdmin={isAdmin} />
+        <SummariesTab workTypes={workTypes} />
       ) : (
-        <ContractsTab workTypes={workTypes} isAdmin={isAdmin} />
+        <ContractsTab workTypes={workTypes} />
       )}
     </div>
   )

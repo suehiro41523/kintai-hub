@@ -31,7 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/shifts', icon: Calendar, label: 'シフト', roles: ['admin', 'manager', 'employee'] },
   { href: '/requests', icon: FileText, label: '申請', roles: ['admin', 'manager', 'employee'] },
   { href: '/reports', icon: BarChart2, label: 'レポート', roles: ['admin', 'manager', 'employee'] },
-  { href: '/billing', icon: DollarSign, label: '精算・請求', roles: ['admin', 'manager'] },
+  { href: '/billing', icon: DollarSign, label: '精算・請求', roles: ['admin'] },
 ]
 
 const SETTINGS_ITEMS: NavItem[] = [
