@@ -12,6 +12,7 @@
 | ブランチの起点 | 最新のmainから切る |
 | ブランチ名 | `<type>/<英語ケバブケース>` |
 | マージ方式 | 指定なし（merge・squash・rebaseのどれでもよい） |
+| マージの条件 | CI（GitHub Actions）のAPIテストが成功していること |
 | マージ後 | ブランチを削除する（リモートは自動削除、ローカルは手動） |
 
 ---
@@ -54,6 +55,7 @@ GitHubのRuleset（Settings → Rules → Rulesets の `main`）で、デフォ�
 
 - PRを経由しない変更を禁止する（直接pushは拒否される）
 - 承認（Approve）は必須にしない（開発者が1人のため、必須にすると自分のPRをマージできなくなる）
+- CI（`.github/workflows/ci.yml`）の `API test` が成功しないとマージできない（Require status checks to pass）
 - force pushとブランチの削除を禁止する
 - Bypass listは空にして、管理者にも同じ制限をかける
 
