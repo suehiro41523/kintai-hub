@@ -11,6 +11,13 @@ export async function findTenantById(tenantId: string): Promise<TenantRow | null
   return row ?? null
 }
 
+// 人数上限の確認から登録までの間に、同じテナントへの別の登録が割り込まないよう行ロックを取る。
+// リクエスト全体のトランザクション(withTenantTransaction)が終わるまでロックが続く
+export async function findTenantByIdForUpdate(tenantId: string): Promise<TenantRow | null> {
+  const [row] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).for('update')
+  return row ?? null
+}
+
 export async function findTenantByStripeCustomerId(
   stripeCustomerId: string,
 ): Promise<TenantRow | null> {
