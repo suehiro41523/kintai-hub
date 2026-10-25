@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, count, eq } from 'drizzle-orm'
 import { db } from '../index.js'
 import { users } from '../schema/core.js'
 
@@ -52,6 +52,15 @@ export async function findUser(tenantId: string, id: string): Promise<MappedUser
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
   return row ? mapUser(row) : null
+}
+
+// 在籍中(is_active = true)のユーザー数。プランの人数上限・契約人数との比較に使う
+export async function countActiveUsers(tenantId: string): Promise<number> {
+  const [row] = await db
+    .select({ value: count() })
+    .from(users)
+    .where(and(eq(users.tenantId, tenantId), eq(users.isActive, true)))
+  return row.value
 }
 
 export type CreateUserData = {

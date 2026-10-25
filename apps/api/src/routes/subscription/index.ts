@@ -6,6 +6,7 @@ import {
   setTenantStripeCustomerId,
   updateBilledSeats,
 } from '../../db/queries/subscription.js'
+import { countActiveUsers } from '../../db/queries/users.js'
 import { logger } from '../../lib/logger.js'
 import { getStripe, isPaidPlan, PLAN_PRICE_IDS } from '../../lib/stripe.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
@@ -19,6 +20,19 @@ const CheckoutSchema = z.object({
 const SeatsSchema = z.object({
   seats: z.number().int().min(1).max(9999),
 })
+
+// 在籍人数より少ない契約人数にすると、人数課金をすり抜けられるため断る(Stripeには反映しない)
+async function validateSeats(
+  tenantId: string,
+  seats: number,
+): Promise<{ error: string; code: 'SEATS_BELOW_ACTIVE_USERS' } | null> {
+  const activeUsers = await countActiveUsers(tenantId)
+  if (seats >= activeUsers) return null
+  return {
+    error: `契約人数は在籍中の従業員数（${activeUsers}人）以上にしてください`,
+    code: 'SEATS_BELOW_ACTIVE_USERS',
+  }
+}
 
 const FRONTEND_URL = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '')
 
@@ -55,6 +69,8 @@ export const subscriptionRouter = new Hono<AppEnv>()
       if (!tenant) {
         return c.json({ error: 'テナントが見つかりません', code: 'NOT_FOUND' }, 404)
       }
+      const seatsError = await validateSeats(tenantId, seats)
+      if (seatsError) return c.json(seatsError, 400)
 
       const priceId = PLAN_PRICE_IDS[plan]
       if (!priceId) {
@@ -127,6 +143,9 @@ export const subscriptionRouter = new Hono<AppEnv>()
           400,
         )
       }
+
+      const seatsError = await validateSeats(tenantId, seats)
+      if (seatsError) return c.json(seatsError, 400)
 
       const subscription = await getStripe().subscriptions.retrieve(tenant.stripeSubscriptionId)
       const item = subscription.items.data[0]

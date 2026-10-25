@@ -3,7 +3,9 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/index.js'
+import { findTenantByIdForUpdate } from '../../db/queries/subscription.js'
 import {
+  countActiveUsers,
   deactivateUser,
   findUser,
   listUsers,
@@ -11,6 +13,7 @@ import {
 } from '../../db/queries/users.js'
 import { users } from '../../db/schema/core.js'
 import { logger } from '../../lib/logger.js'
+import { getUserLimit } from '../../lib/plan-limits.js'
 import { supabaseAdmin } from '../../lib/supabase.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
@@ -49,6 +52,23 @@ export const usersRouter = new Hono<AppEnv>()
   .post('/', verifySession, injectTenantContext, requireRole('admin'), zValidator('json', CreateSchema), async (c) => {
     const data = c.req.valid('json')
     const tenantId = c.get('tenantId')
+
+    // プランの人数上限(無料プラン)・契約人数(人数課金プラン)に達していたら、招待メールを送る前に断る
+    const tenant = await findTenantByIdForUpdate(tenantId)
+    if (!tenant) {
+      return c.json({ error: 'テナントが見つかりません', code: 'NOT_FOUND' }, 404)
+    }
+    const limit = getUserLimit(tenant)
+    if (limit !== null && (await countActiveUsers(tenantId)) >= limit) {
+      logger.info({ tenantId, plan: tenant.plan, limit }, 'user_invite_rejected_limit_reached')
+      return c.json(
+        {
+          error: 'ご契約の人数上限に達しているため、これ以上従業員を登録できません',
+          code: 'USER_LIMIT_REACHED',
+        },
+        409,
+      )
+    }
 
     // Supabase Auth側にユーザーを作成し招待メールを送信する(本人が招待リンクから自分でパスワードを設定する)
     const { data: invited, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(data.email)
