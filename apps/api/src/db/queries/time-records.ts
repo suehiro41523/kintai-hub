@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, gte, lte } from 'drizzle-orm'
-import type { ActiveSession, DaySummary, RecordType } from '../../types.js'
+import type { ActiveSession, DaySummary, RecordType, Role } from '../../types.js'
 import { db } from '../index.js'
 import { timeRecords } from '../schema/app.js'
+import { type AuditActor, insertAuditLog } from './audit-logs.js'
 import type { WorkTypeRow } from './work-types.js'
 
 export type TimeRecordRow = typeof timeRecords.$inferSelect
@@ -47,35 +48,48 @@ export type PatchTimeRecordData = {
   workTypeId?: string
 }
 
+// 打刻の修正。打刻の更新と監査ログを1つのトランザクションで行う。
+// managerは自分の打刻を修正できない(本人による勤怠の改ざんを防ぐため)。adminは自分の打刻も修正してよい
 export async function patchTimeRecord(
   tenantId: string,
   id: string,
   data: PatchTimeRecordData,
-  modifiedBy: string,
-): Promise<MappedTimeRecord | null> {
+  actor: AuditActor,
+  actorRole: Role,
+): Promise<MappedTimeRecord | 'not_found' | 'self_modification'> {
   const [existing] = await db
     .select()
     .from(timeRecords)
     .where(and(eq(timeRecords.id, id), eq(timeRecords.tenantId, tenantId)))
     .limit(1)
 
-  if (!existing) return null
+  if (!existing) return 'not_found'
+  if (existing.userId === actor.userId && actorRole !== 'admin') return 'self_modification'
 
-  const now = new Date()
-  const [updated] = await db
-    .update(timeRecords)
-    .set({
-      ...(data.clockedAt !== undefined && { clockedAt: data.clockedAt }),
-      ...(data.workTypeId !== undefined && { workTypeId: data.workTypeId }),
-      isModified: true,
-      modifiedBy,
-      modifiedAt: now,
-      originalClockedAt: existing.isModified ? existing.originalClockedAt : existing.clockedAt,
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(timeRecords)
+      .set({
+        ...(data.clockedAt !== undefined && { clockedAt: data.clockedAt }),
+        ...(data.workTypeId !== undefined && { workTypeId: data.workTypeId }),
+        isModified: true,
+        modifiedBy: actor.userId,
+        modifiedAt: new Date(),
+        originalClockedAt: existing.isModified ? existing.originalClockedAt : existing.clockedAt,
+      })
+      .where(and(eq(timeRecords.id, id), eq(timeRecords.tenantId, tenantId)))
+      .returning()
+    await insertAuditLog(tx, {
+      tenantId,
+      actor,
+      action: 'update',
+      resourceType: 'time_record',
+      resourceId: id,
+      beforeValue: { clockedAt: existing.clockedAt, workTypeId: existing.workTypeId },
+      afterValue: { clockedAt: updated.clockedAt, workTypeId: updated.workTypeId },
     })
-    .where(and(eq(timeRecords.id, id), eq(timeRecords.tenantId, tenantId)))
-    .returning()
-
-  return mapRecord(updated)
+    return mapRecord(updated)
+  })
 }
 
 export async function listRecords(
