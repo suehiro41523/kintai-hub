@@ -4,13 +4,19 @@ import { downgradeTenantToFree, syncSubscriptionToTenant } from '../../db/querie
 import { logger } from '../../lib/logger.js'
 import { getStripe } from '../../lib/stripe.js'
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? ''
-
 export const stripeWebhookRouter = new Hono()
 
   // Stripeからのサーバー間通知。セッション認証もCORSも通さない生エンドポイント。
   // 署名検証のため、JSONパース前の生ボディをそのまま使う必要がある
   .post('/stripe', async (c) => {
+    // 未設定のまま空文字を鍵にすると、誰でも正しい署名を作れてWebhookを偽造できる。
+    // 素通しにせず、設定漏れとして500を返す(Stripeは5xxなら再送するため、設定後に取りこぼしなく処理できる)
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+    if (!webhookSecret) {
+      logger.error('STRIPE_WEBHOOK_SECRET が未設定のため、Stripe Webhookを処理できません')
+      return c.json({ error: 'Internal Server Error', code: 'INTERNAL_ERROR' }, 500)
+    }
+
     const signature = c.req.header('stripe-signature')
     if (!signature) {
       return c.json({ error: 'signature missing', code: 'VALIDATION_ERROR' }, 400)
