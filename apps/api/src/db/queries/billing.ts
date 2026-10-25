@@ -351,6 +351,7 @@ export async function calculateBillingSummary(
     .insert(billingSummaries)
     .values({
       id: randomUUID(),
+      tenantId,
       contractId,
       year,
       month,

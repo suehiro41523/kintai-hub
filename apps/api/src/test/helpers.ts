@@ -76,6 +76,7 @@ export async function createTestTenant(): Promise<TestTenant> {
   const summaryId = randomUUID()
   await db.insert(billingSummaries).values({
     id: summaryId,
+    tenantId,
     contractId,
     year: TEST_YEAR,
     month: TEST_MONTH,

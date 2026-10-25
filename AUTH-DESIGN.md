@@ -38,7 +38,8 @@
 認証済みAPIリクエスト（apps/api側）
   → verifySession ミドルウェア（SupabaseのJWKSエンドポイントで署名検証、有効期限チェック）
   → JWTのsubからcore.usersを検索し、tenantId・role・isActiveを取得
-  → injectTenantContext ミドルウェア（SET app.tenant_id をDBに実行）
+  → injectTenantContext ミドルウェア（以降の処理をテナント用トランザクションで包む。
+     トランザクション内で SET LOCAL ROLE kintai_app と app.tenant_id の設定を行う）
   → RLS自動適用（appスキーマのクエリに自動フィルタ）
   → requireRole ミドルウェア（ロールチェック）
   → ハンドラー実行
@@ -76,34 +77,71 @@ Supabase Authのメール確認リンクはPKCE方式（`?code=...`をフロン�
 
 ## RLSポリシー
 
-appスキーマの全テーブルに以下のポリシーが設定されています（変更なし）。
+tenant_id列を持つappスキーマの全テーブルに、以下のポリシーを設定しています（マイグレーション `0004` で作成）。
 
 ```sql
 ALTER TABLE app.time_records ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON app.time_records
-  USING (tenant_id = current_setting('app.tenant_id')::uuid);
+  USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 ```
 
-`set_config`の第3引数`true`はトランザクションローカルを意味します。
-トランザクション終了時に自動リセットされるため、コネクションプールでの汚染を防ぎます。
+- `app.tenant_id` が未設定のときは条件がNULLになり、1行も返らない（エラーにはしない）
+  - RLSはアプリ側の `WHERE tenant_id` が漏れたときの保険なので、DB側は「漏らさない」方向に倒れれば十分（fail-closed）
+  - `current_setting` は、そのセッションで一度も設定されていなければ `NULL`、プール内で過去に `set_config(..., true)` されたコネクションでは `''` を返す。DB側でエラーにしようとするとコネクションの状態で挙動が変わるため、`NULLIF` で両方を `NULL` に揃えている
+  - その代わり、呼び出し側のバグ（tenantIdの渡し忘れ・空文字など）は `withTenantTransaction` の入口でtenantIdがUUID形式かを検証し、アプリ側の例外として検知する
+- `WITH CHECK` により、他テナントの `tenant_id` を指定したINSERT/UPDATEも拒否される
+- `billing_summaries`・`billing_contract_members`・`request_approvals` は本来親テーブル経由でテナントが決まるが、RLSで直接判定できるよう `tenant_id` を複製して持つ
+
+### RLSを回避させないためのロール切り替え
+
+スーパーユーザー（ローカルのDocker）とテーブル所有者（Neon）はRLSを無視するため、接続ユーザーのままではポリシーが効かない。
+そこでマイグレーションでログイン不可のロール `kintai_app` を作成し、テナント用トランザクションの開始時に `SET LOCAL ROLE kintai_app` で切り替える。
+
+- `kintai_app` は所有者ではないためRLSが必ず適用される
+- 権限は app・core スキーマのテーブルの SELECT/INSERT/UPDATE/DELETE。ただし `audit_logs` は SELECT/INSERT のみ（UPDATE/DELETE禁止をDB側でも強制）
+- `SET LOCAL` はトランザクション終了で元に戻るため、コネクションプールで他のリクエストに引き継がれない
+- マイグレーション・シードは接続ユーザーのまま実行するため、RLSの影響を受けない
 
 **補足（Supabase Auth採用後も変わらない理由）**: SupabaseにはRLSポリシー内で`auth.uid()`を直接参照できる仕組みがあるが、これは自社Postgres（Neon）+ PostgRESTを経由しないHono/Drizzleの直接接続では機能しない（`auth.uid()`はPostgRESTがリクエストごとに`request.jwt.claims`をセッション変数へ注入する前提の関数のため）。そのため`injectTenantContext`による`set_config('app.tenant_id', ...)`の手動注入方式は今後も維持する。
 
 ## injectTenantContext ミドルウェア
 
+`set_config` の第3引数 `true`（トランザクションローカル）は、トランザクションの外で実行すると文の終了と同時に消える。
+そのため、リクエストの残りの処理をまるごと1つのトランザクションで包み、その中で設定する。
+
 ```typescript
-// apps/api/src/middleware/tenant.ts（変更なし）
-export const injectTenantContext = createMiddleware(async (c, next) => {
+// apps/api/src/middleware/auth.ts
+export const injectTenantContext = createMiddleware<AppEnv>(async (c, next) => {
   const tenantId = c.get('tenantId')
   if (!tenantId) return c.json({ error: 'Forbidden', code: 'FORBIDDEN' }, 403)
 
-  await db.execute(
-    sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`
-  )
-  await next()
+  try {
+    await withTenantTransaction(tenantId, async (tx) => {
+      await next()
+      if (c.error) tx.rollback() // ハンドラーで例外が起きたら書き込みを取り消す
+    })
+  } catch (err) {
+    if (!(err instanceof TransactionRollbackError)) throw err
+  }
 })
 ```
+
+```typescript
+// apps/api/src/db/index.ts
+export function withTenantTransaction<T>(tenantId: string, fn: (tx: Tx) => Promise<T>) {
+  return requireDb().transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL ROLE kintai_app`)
+    await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
+    return tenantTxStorage.run(tx, () => fn(tx))
+  })
+}
+```
+
+- `db`（Proxy）は AsyncLocalStorage に保持したトランザクションに解決されるため、クエリ側のコードは `db.select()` 等のままでよい
+- クエリ内の `db.transaction()` は、このトランザクションの中でsavepointとして動く
+- `injectTenantContext` を通らない処理（サインアップ、Stripe Webhook、`verifySession` 内のユーザー検索）は接続ユーザーのまま実行される。これらは core スキーマ（RLS対象外）だけを扱う
 
 ## verifySession ミドルウェア（変更）
 
