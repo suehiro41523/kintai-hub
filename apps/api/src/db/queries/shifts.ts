@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { and, asc, between, eq } from 'drizzle-orm'
+import { and, asc, between, eq, inArray } from 'drizzle-orm'
 import { db } from '../index.js'
-import { shiftPatterns, shifts } from '../schema/app.js'
+import { shiftPatterns, shifts, workTypes } from '../schema/app.js'
+import { users } from '../schema/core.js'
 
 // ─── 型定義 ───────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,69 @@ export type UpsertResult = {
   errors: { index: number; message: string }[]
 }
 
+// リクエストに含まれるID（従業員・ワークタイプ・シフトパターン）のうち、自テナントに存在する有効なものを返す。
+// 外部キーはテナントを区別しないため、確認しないと他テナントのIDを参照するシフトを登録できてしまう
+async function findValidReferenceIds(tenantId: string, items: UpsertShiftItem[]) {
+  const unique = (ids: (string | null | undefined)[]) =>
+    [...new Set(ids.filter((id): id is string => typeof id === 'string'))]
+  const userIds = unique(items.map((i) => i.userId))
+  const workTypeIds = unique(items.map((i) => i.workTypeId))
+  const shiftPatternIds = unique(items.map((i) => i.shiftPatternId))
+
+  const [validUsers, validWorkTypes, validShiftPatterns] = await Promise.all([
+    db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(eq(users.tenantId, tenantId), eq(users.isActive, true), inArray(users.id, userIds)),
+      ),
+    workTypeIds.length > 0
+      ? db
+          .select({ id: workTypes.id })
+          .from(workTypes)
+          .where(
+            and(
+              eq(workTypes.tenantId, tenantId),
+              eq(workTypes.isActive, true),
+              inArray(workTypes.id, workTypeIds),
+            ),
+          )
+      : Promise.resolve([]),
+    shiftPatternIds.length > 0
+      ? db
+          .select({ id: shiftPatterns.id })
+          .from(shiftPatterns)
+          .where(
+            and(
+              eq(shiftPatterns.tenantId, tenantId),
+              eq(shiftPatterns.isActive, true),
+              inArray(shiftPatterns.id, shiftPatternIds),
+            ),
+          )
+      : Promise.resolve([]),
+  ])
+
+  return {
+    userIds: new Set(validUsers.map((r) => r.id)),
+    workTypeIds: new Set(validWorkTypes.map((r) => r.id)),
+    shiftPatternIds: new Set(validShiftPatterns.map((r) => r.id)),
+  }
+}
+
+function findInvalidReference(
+  item: UpsertShiftItem,
+  valid: Awaited<ReturnType<typeof findValidReferenceIds>>,
+): string | null {
+  if (!valid.userIds.has(item.userId)) return '指定された従業員が存在しません'
+  if (item.workTypeId && !valid.workTypeIds.has(item.workTypeId)) {
+    return '指定されたワークタイプが存在しません'
+  }
+  if (item.shiftPatternId && !valid.shiftPatternIds.has(item.shiftPatternId)) {
+    return '指定されたシフトパターンが存在しません'
+  }
+  return null
+}
+
 export async function upsertShifts(
   tenantId: string,
   createdBy: string,
@@ -123,9 +187,16 @@ export async function upsertShifts(
   const updated: MappedShift[] = []
   const errors: { index: number; message: string }[] = []
 
+  const valid = await findValidReferenceIds(tenantId, items)
+
   await db.transaction(async (tx) => {
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
+      const invalidMessage = findInvalidReference(item, valid)
+      if (invalidMessage) {
+        errors.push({ index: i, message: invalidMessage })
+        continue
+      }
       try {
         const [existing] = await tx
           .select()
