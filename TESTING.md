@@ -14,65 +14,89 @@ npm run test -w @kintai/api
 
 ## テストファイルの配置
 
-ソースファイルと同じディレクトリに `.test.ts` で配置します。
+APIのインテグレーションテストは、ルートのディレクトリごとに `<ディレクトリ名>.test.ts` を1つ置きます。DB層のテスト（RLSなど）は `src/db/` に置きます。
 
 ```
 apps/api/src/routes/time-records/
   clock-in.ts
-  clock-in.test.ts
+  break-start.ts
+  patch.ts
+  time-records.test.ts
+apps/api/src/db/
+  rls.test.ts
 ```
 
 ## マルチテナントのテストパターン
 
 ```typescript
-import { createTestContext } from '../../test/helpers'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { apiRequest, createTestTenant, type TestTenant } from '../../test/helpers.js'
 
-describe('POST /api/v1/time-records/clock-in', () => {
-  let ctx: TestContext
+describe('POST /time-records/clock-in', () => {
+  let tenant: TestTenant
+  let otherTenant: TestTenant
 
   beforeEach(async () => {
-    ctx = await createTestContext()
+    tenant = await createTestTenant()
+    otherTenant = await createTestTenant()
   })
 
   it('ワークタイプを指定して出勤打刻できる', async () => {
-    const res = await ctx.api.post('/api/v1/time-records/clock-in', {
-      workTypeId: ctx.workTypes.officeWork.id,
+    const res = await apiRequest('/time-records/clock-in', {
+      token: tenant.users.employee.token,
+      method: 'POST',
+      body: { workTypeId: tenant.workTypeId },
     })
-    expect(res.status).toBe(201)
-    expect(res.body.record.workTypeId).toBe(ctx.workTypes.officeWork.id)
-  })
 
-  it('既に出勤中の場合は400を返す', async () => {
-    await ctx.clockIn()
-    const res = await ctx.api.post('/api/v1/time-records/clock-in', {
-      workTypeId: ctx.workTypes.officeWork.id,
-    })
-    expect(res.status).toBe(400)
-    expect(res.body.code).toBe('ALREADY_CLOCKED_IN')
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as { record: { workTypeId: string } }
+    expect(body.record.workTypeId).toBe(tenant.workTypeId)
   })
 
   it('別テナントのワークタイプは使用できない', async () => {
-    const otherCtx = await createTestContext()
-    const res = await ctx.api.post('/api/v1/time-records/clock-in', {
-      workTypeId: otherCtx.workTypes.officeWork.id,
+    const res = await apiRequest('/time-records/clock-in', {
+      token: tenant.users.employee.token,
+      method: 'POST',
+      body: { workTypeId: otherTenant.workTypeId },
     })
+
     expect(res.status).toBe(404)
   })
 })
 ```
 
-## createTestContext の仕様
+- レスポンスは標準の `Response`。ボディは `await res.json()` で取り出し、`as` で期待する型を付ける
+- DBの状態を確認したいときは、テストから `db`（`src/db/index.ts`）で直接SELECTする。テストからのクエリはテナント用トランザクションの外で、接続ユーザー（スーパーユーザー）のまま実行されるため、RLSの影響を受けない
+- 別テナントのデータが絡むテストは、`createTestTenant()` をもう1回呼んで別テナントを作る
 
-```typescript
-// apps/api/src/test/helpers.ts
-export async function createTestContext(): Promise<TestContext> {
-  // テナント作成
-  // 管理者ユーザー作成
-  // デフォルトワークタイプ作成（officeWork, clientA, clientB）
-  // セッションCookieをセット
-  // apiクライアントを返す
-}
-```
+## テストヘルパー（`src/test/helpers.ts`）
+
+### `createTestTenant(): Promise<TestTenant>`
+
+呼ぶたびに独立したテナントを1つ作り、次のデータを登録します。テスト間でデータを共有しないため、テスト後の削除は行いません。
+
+| データ | 内容 | 戻り値での参照 |
+|---|---|---|
+| テナント | `plan: 'free'`、`status: 'active'` | `tenantId` |
+| ユーザー | admin・manager・employee の3人 | `users.admin` / `users.manager` / `users.employee`（それぞれ `{ id, token }`） |
+| ワークタイプ | 「客先常駐」（`billingType: 'hourly'`） | `workTypeId` |
+| 精算契約 | 上記ワークタイプの時間単価契約（`TEST_YEAR`年1月1日開始） | `contractId` |
+| 精算サマリー | 上記契約の `TEST_YEAR`年`TEST_MONTH`月分、`status: 'draft'` | `summaryId` |
+
+`TEST_YEAR`（2026）・`TEST_MONTH`（9）も `helpers.ts` から export しています。
+
+### `apiRequest(path, { token, method?, body? }): Promise<Response>`
+
+Honoの `app.request()` でAPIを呼びます。HTTPサーバーは起動しません。
+
+- `path` は `/api/v1` を除いたパス（例：`/billing/contracts`）
+- `token` は `Authorization: Bearer <token>` に入る。`users.admin.token` などを渡す
+- `method` は省略時 `GET`。`body` を渡すとJSONに変換し、`Content-Type: application/json` を付ける
+
+### 認証のモック（`src/test/setup.ts`）
+
+Supabase Authには接続しません。`verifyAccessToken` をモックし、受け取ったトークン文字列をそのままSupabaseのユーザーID（`sub`）として扱います。
+`createTestTenant()` が作るユーザーは `token` と `core.users.auth_user_id` が同じ値なので、`token` を渡すとそのユーザーとして認証されます。
 
 ## テストの種類と方針
 
