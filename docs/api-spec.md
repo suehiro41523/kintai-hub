@@ -130,7 +130,7 @@
 | 3 | PATCH | /shift-patterns/:id | シフトパターン更新 | admin | name?, startTime?, endTime?, breakMinutes?, isActive? | { pattern } | 404 | 必須 |
 | 4 | GET | /shifts | シフト一覧取得（自分） | all | ?from&to | { shifts } | 400 | 必須 |
 | 5 | GET | /shifts/team | チームシフト一覧 | manager | ?from&to&userId | { shifts } | 403 | 必須 |
-| 6 | POST | /shifts/bulk | シフト一括作成・更新（1件でも失敗したら全件を登録しない） | manager | shifts: [{ userId, shiftDate, startTime, endTime, workTypeId?, shiftPatternId? }] | { created, updated } | 400 自テナントに存在しないIDを含む（details に `shifts.<行番号>.<項目>`） | 必須 |
+| 6 | POST | /shifts/bulk | シフト一括作成・更新（1件でも失敗したら全件を登録しない） | manager | shifts: [{ userId, shiftDate, startTime, endTime, workTypeId?, shiftPatternId? }] | { created, updated } | 400 日付・時刻の形式が不正、または自テナントに存在しないIDを含む（details に `shifts.<行番号>.<項目>`） | 必須 |
 | 7 | DELETE | /shifts/:id | シフト削除 | manager | なし | { success: true } | 404 | 必須 |
 | 8 | POST | /shifts/publish | シフト公開（通知送信） | manager | shiftIds: [uuid] | { published, notified } | 400 | 必須 |
 | 9 | POST | /shifts/preference | シフト希望提出 | employee | preferences: [{ date, preferredStart, preferredEnd, note? }] | { submitted } | 400 | 必須 |

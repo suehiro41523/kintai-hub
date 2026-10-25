@@ -9,17 +9,24 @@ import {
   upsertShifts,
 } from '../../db/queries/shifts.js'
 import { logger } from '../../lib/logger.js'
+import { formatValidationError } from '../../lib/validation.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
+
+// 画面の <input type="time"> は HH:MM、DBから読んだシフトパターンは HH:MM:SS になるため両方を受け付ける。
+// 形式を検証しないと、不正な値がDBへの書き込みで初めてエラーになり、入力ミスなのに500になる
+const TimeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, '時刻は HH:MM の形式で指定してください')
 
 const BulkUpsertSchema = z.object({
   shifts: z
     .array(
       z.object({
         userId: z.string().uuid(),
-        shiftDate: z.string(),
-        startTime: z.string(),
-        endTime: z.string(),
+        shiftDate: z.string().date('日付は YYYY-MM-DD の形式で、実在する日付を指定してください'),
+        startTime: TimeSchema,
+        endTime: TimeSchema,
         workTypeId: z.string().uuid().nullable().optional(),
         shiftPatternId: z.string().uuid().nullable().optional(),
       }),
@@ -55,7 +62,7 @@ export const shiftsRouter = new Hono<AppEnv>()
     verifySession,
     injectTenantContext,
     requireRole('manager', 'admin'),
-    zValidator('json', BulkUpsertSchema),
+    zValidator('json', BulkUpsertSchema, formatValidationError),
     async (c) => {
       const { shifts } = c.req.valid('json')
       const tenantId = c.get('tenantId')
