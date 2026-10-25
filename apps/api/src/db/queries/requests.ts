@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { and, asc, desc, eq } from 'drizzle-orm'
+import type { Role } from '../../types.js'
 import { db } from '../index.js'
 import { requestApprovals, requests } from '../schema/app.js'
+import { type AuditActor, insertAuditLog } from './audit-logs.js'
 
 // ─── 型定義 ───────────────────────────────────────────────────────────────────
 
@@ -87,64 +89,70 @@ export async function createRequest(data: CreateRequestData): Promise<MappedRequ
   return row
 }
 
-export async function approveRequest(
+export type DecideRequestResult = MappedRequest | 'not_found' | 'not_pending' | 'self_decision'
+
+// 申請の承認・却下。承認履歴(request_approvals)・申請の状態・監査ログを1つのトランザクションで更新する。
+// managerは自分の申請を承認・却下できない(本人による勤怠の改ざんを防ぐため)。adminは自分の申請も承認・却下してよい
+async function decideRequest(
   tenantId: string,
   requestId: string,
-  approverId: string,
+  actor: AuditActor,
+  actorRole: Role,
+  decision: 'approved' | 'rejected',
   comment?: string | null,
-): Promise<MappedRequest | 'not_found' | 'not_pending'> {
+): Promise<DecideRequestResult> {
   const req = await findRequest(tenantId, requestId)
   if (!req) return 'not_found'
+  if (req.userId === actor.userId && actorRole !== 'admin') return 'self_decision'
   if (req.status !== 'pending') return 'not_pending'
 
-  const [updated] = await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     await tx.insert(requestApprovals).values({
       id: randomUUID(),
       tenantId,
       requestId,
-      approverId,
+      approverId: actor.userId,
       step: 1,
-      status: 'approved',
+      status: decision,
       comment: comment ?? null,
       approvedAt: new Date(),
     })
-    return tx
+    const [updated] = await tx
       .update(requests)
-      .set({ status: 'approved', updatedAt: new Date() })
-      .where(eq(requests.id, requestId))
+      .set({ status: decision, updatedAt: new Date() })
+      .where(and(eq(requests.id, requestId), eq(requests.tenantId, tenantId)))
       .returning()
+    await insertAuditLog(tx, {
+      tenantId,
+      actor,
+      action: decision === 'approved' ? 'approve' : 'reject',
+      resourceType: 'request',
+      resourceId: requestId,
+      beforeValue: { status: req.status },
+      afterValue: { status: decision, comment: comment ?? null },
+    })
+    return updated
   })
-  return updated
 }
 
-export async function rejectRequest(
+export function approveRequest(
   tenantId: string,
   requestId: string,
-  approverId: string,
+  actor: AuditActor,
+  actorRole: Role,
   comment?: string | null,
-): Promise<MappedRequest | 'not_found' | 'not_pending'> {
-  const req = await findRequest(tenantId, requestId)
-  if (!req) return 'not_found'
-  if (req.status !== 'pending') return 'not_pending'
+): Promise<DecideRequestResult> {
+  return decideRequest(tenantId, requestId, actor, actorRole, 'approved', comment)
+}
 
-  const [updated] = await db.transaction(async (tx) => {
-    await tx.insert(requestApprovals).values({
-      id: randomUUID(),
-      tenantId,
-      requestId,
-      approverId,
-      step: 1,
-      status: 'rejected',
-      comment: comment ?? null,
-      approvedAt: new Date(),
-    })
-    return tx
-      .update(requests)
-      .set({ status: 'rejected', updatedAt: new Date() })
-      .where(eq(requests.id, requestId))
-      .returning()
-  })
-  return updated
+export function rejectRequest(
+  tenantId: string,
+  requestId: string,
+  actor: AuditActor,
+  actorRole: Role,
+  comment?: string | null,
+): Promise<DecideRequestResult> {
+  return decideRequest(tenantId, requestId, actor, actorRole, 'rejected', comment)
 }
 
 export async function cancelRequest(

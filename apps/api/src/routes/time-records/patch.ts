@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { patchTimeRecord } from '../../db/queries/time-records.js'
 import { findWorkType } from '../../db/queries/work-types.js'
+import { getAuditActor } from '../../lib/audit.js'
 import { logger } from '../../lib/logger.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
@@ -39,11 +40,15 @@ export const patchRoute = new Hono<AppEnv>().patch(
         clockedAt: data.clockedAt ? new Date(data.clockedAt) : undefined,
         workTypeId: data.workTypeId,
       },
-      modifiedBy,
+      getAuditActor(c),
+      c.get('role'),
     )
 
-    if (!record) {
+    if (record === 'not_found') {
       return c.json({ error: '打刻記録が見つかりません', code: 'NOT_FOUND' }, 404)
+    }
+    if (record === 'self_modification') {
+      return c.json({ error: '自分の打刻は修正できません', code: 'FORBIDDEN' }, 403)
     }
 
     logger.info({ tenantId, recordId: id, modifiedBy }, 'time_record_patched')

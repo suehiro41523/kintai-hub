@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { and, asc, eq } from 'drizzle-orm'
 import { db } from '../index.js'
 import { users } from '../schema/core.js'
+import { type AuditActor, insertAuditLog } from './audit-logs.js'
 
 // ─── 型定義 ───────────────────────────────────────────────────────────────────
 
@@ -89,11 +90,17 @@ export async function createUser(data: CreateUserData): Promise<MappedUser> {
 
 export type UpdateUserData = Partial<Omit<CreateUserData, 'tenantId'>>
 
+// 従業員情報の更新(ロール変更を含む)。更新と監査ログを1つのトランザクションで行う。
+// 監査ログには、リクエストで指定された項目だけ変更前後の値を残す
 export async function updateUser(
   tenantId: string,
   id: string,
   data: UpdateUserData,
+  actor: AuditActor,
 ): Promise<MappedUser | null> {
+  const before = await findUser(tenantId, id)
+  if (!before) return null
+
   const set: Record<string, unknown> = { updatedAt: new Date() }
   if (data.name !== undefined) set.name = data.name
   if (data.email !== undefined) set.email = data.email
@@ -102,19 +109,51 @@ export async function updateUser(
   if (data.hourlyRate !== undefined) set.hourlyRate = data.hourlyRate?.toString() ?? null
   if (data.monthlySalary !== undefined) set.monthlySalary = data.monthlySalary?.toString() ?? null
 
-  const [row] = await db
-    .update(users)
-    .set(set)
-    .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
-    .returning()
-  return row ? mapUser(row) : null
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(users)
+      .set(set)
+      .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
+      .returning()
+    const after = mapUser(row)
+    const changedKeys = (Object.keys(data) as (keyof UpdateUserData)[]).filter(
+      (key) => data[key] !== undefined,
+    )
+    await insertAuditLog(tx, {
+      tenantId,
+      actor,
+      action: 'update',
+      resourceType: 'user',
+      resourceId: id,
+      beforeValue: Object.fromEntries(changedKeys.map((key) => [key, before[key]])),
+      afterValue: Object.fromEntries(changedKeys.map((key) => [key, after[key]])),
+    })
+    return after
+  })
 }
 
-export async function deactivateUser(tenantId: string, id: string): Promise<boolean> {
-  const rows = await db
-    .update(users)
-    .set({ isActive: false, updatedAt: new Date() })
-    .where(and(eq(users.id, id), eq(users.tenantId, tenantId), eq(users.isActive, true)))
-    .returning()
-  return rows.length > 0
+// 従業員の無効化。更新と監査ログを1つのトランザクションで行う
+export async function deactivateUser(
+  tenantId: string,
+  id: string,
+  actor: AuditActor,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .update(users)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(and(eq(users.id, id), eq(users.tenantId, tenantId), eq(users.isActive, true)))
+      .returning()
+    if (rows.length === 0) return false
+    await insertAuditLog(tx, {
+      tenantId,
+      actor,
+      action: 'deactivate',
+      resourceType: 'user',
+      resourceId: id,
+      beforeValue: { isActive: true },
+      afterValue: { isActive: false },
+    })
+    return true
+  })
 }

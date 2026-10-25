@@ -10,6 +10,7 @@ import {
   updateUser,
 } from '../../db/queries/users.js'
 import { users } from '../../db/schema/core.js'
+import { getAuditActor } from '../../lib/audit.js'
 import { logger } from '../../lib/logger.js'
 import { supabaseAdmin } from '../../lib/supabase.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
@@ -118,7 +119,7 @@ export const usersRouter = new Hono<AppEnv>()
       const id = c.req.param('id')
       const data = c.req.valid('json')
       const tenantId = c.get('tenantId')
-      const user = await updateUser(tenantId, id, data)
+      const user = await updateUser(tenantId, id, data, getAuditActor(c))
       if (!user) {
         return c.json({ error: '従業員が見つかりません', code: 'NOT_FOUND' }, 404)
       }
@@ -136,7 +137,7 @@ export const usersRouter = new Hono<AppEnv>()
       return c.json({ error: '従業員が見つかりません', code: 'NOT_FOUND' }, 404)
     }
 
-    const ok = await deactivateUser(tenantId, id)
+    const ok = await deactivateUser(tenantId, id, getAuditActor(c))
     if (!ok) {
       return c.json({ error: '従業員が見つかりません', code: 'NOT_FOUND' }, 404)
     }

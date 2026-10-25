@@ -9,6 +9,7 @@ import {
   listPendingRequests,
   rejectRequest,
 } from '../../db/queries/requests.js'
+import { getAuditActor } from '../../lib/audit.js'
 import { logger } from '../../lib/logger.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
@@ -66,9 +67,12 @@ export const requestsRouter = new Hono<AppEnv>()
       const { comment } = c.req.valid('json')
       const tenantId = c.get('tenantId')
       const approverId = c.get('userId')
-      const result = await approveRequest(tenantId, id, approverId, comment)
+      const result = await approveRequest(tenantId, id, getAuditActor(c), c.get('role'), comment)
       if (result === 'not_found') {
         return c.json({ error: '申請が見つかりません', code: 'NOT_FOUND' }, 404)
+      }
+      if (result === 'self_decision') {
+        return c.json({ error: '自分の申請は承認・却下できません', code: 'FORBIDDEN' }, 403)
       }
       if (result === 'not_pending') {
         return c.json({ error: 'この申請は承認待ち状態ではありません', code: 'NOT_PENDING' }, 409)
@@ -89,9 +93,12 @@ export const requestsRouter = new Hono<AppEnv>()
       const { comment } = c.req.valid('json')
       const tenantId = c.get('tenantId')
       const approverId = c.get('userId')
-      const result = await rejectRequest(tenantId, id, approverId, comment)
+      const result = await rejectRequest(tenantId, id, getAuditActor(c), c.get('role'), comment)
       if (result === 'not_found') {
         return c.json({ error: '申請が見つかりません', code: 'NOT_FOUND' }, 404)
+      }
+      if (result === 'self_decision') {
+        return c.json({ error: '自分の申請は承認・却下できません', code: 'FORBIDDEN' }, 403)
       }
       if (result === 'not_pending') {
         return c.json({ error: 'この申請は承認待ち状態ではありません', code: 'NOT_PENDING' }, 409)

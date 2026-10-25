@@ -105,18 +105,24 @@ export const workTypes = appSchema.table('work_types', {
 
 ## audit_logs への書き込み
 
+`insertAuditLog()`（`apps/api/src/db/queries/audit-logs.ts`）を使い、**業務データの更新と同じトランザクション（`tx`）で**書き込む。
+操作者の情報はルートで `getAuditActor(c)`（`apps/api/src/lib/audit.ts`）から取り出してクエリ関数に渡す。
+
 ```typescript
-// INSERT のみ。UPDATE / DELETE は禁止
-await db.insert(auditLogs).values({
-  id:           randomUUID(),
-  tenantId,
-  userId,
-  action:       'update',
-  resourceType: 'time_record',
-  resourceId:   recordId,
-  beforeValue:  JSON.stringify(before),
-  afterValue:   JSON.stringify(after),
-  ipAddress:    c.req.header('x-forwarded-for'),
-  createdAt:    new Date(),
+// INSERT のみ。UPDATE / DELETE は禁止（DB側でも kintai_app ロールの権限で禁止している）
+return db.transaction(async (tx) => {
+  const [updated] = await tx.update(timeRecords).set({ ... }).where(...).returning()
+  await insertAuditLog(tx, {
+    tenantId,
+    actor,                       // { userId, ipAddress, userAgent }
+    action: 'update',
+    resourceType: 'time_record',
+    resourceId: id,
+    beforeValue: { clockedAt: existing.clockedAt },  // オブジェクトのまま渡す（JSON.stringifyしない）
+    afterValue: { clockedAt: updated.clockedAt },
+  })
+  return updated
 })
 ```
+
+現在記録している操作：打刻修正（`time_record` / `update`）、申請の承認・却下（`request` / `approve`・`reject`）、従業員の更新・無効化（`user` / `update`・`deactivate`）
