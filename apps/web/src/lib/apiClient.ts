@@ -550,10 +550,10 @@ export const api = {
         shiftPatternId?: string | null
       }[],
     ) =>
-      request<{ created: Shift[]; updated: Shift[]; errors: { index: number; message: string }[] }>(
-        '/shifts/bulk',
-        { method: 'POST', body: JSON.stringify({ shifts: items }) },
-      ),
+      request<{ created: Shift[]; updated: Shift[] }>('/shifts/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ shifts: items }),
+      }),
 
     delete: (id: string) => request<{ success: boolean }>(`/shifts/${id}`, { method: 'DELETE' }),
   },

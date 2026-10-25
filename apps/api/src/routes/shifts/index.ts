@@ -1,7 +1,13 @@
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { deleteShift, listMyShifts, listTeamShifts, upsertShifts } from '../../db/queries/shifts.js'
+import {
+  deleteShift,
+  findInvalidShiftReferences,
+  listMyShifts,
+  listTeamShifts,
+  upsertShifts,
+} from '../../db/queries/shifts.js'
 import { logger } from '../../lib/logger.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
@@ -54,6 +60,15 @@ export const shiftsRouter = new Hono<AppEnv>()
       const { shifts } = c.req.valid('json')
       const tenantId = c.get('tenantId')
       const createdBy = c.get('userId')
+      // 画面からは自テナントのIDしか送られないため、1件でも不正なら改ざんか不具合とみなし、全件を拒否する
+      const invalid = await findInvalidShiftReferences(tenantId, shifts)
+      if (invalid.length > 0) {
+        logger.warn({ tenantId, userId: createdBy, invalid }, 'shifts_bulk: invalid references')
+        return c.json(
+          { error: 'バリデーションエラー', code: 'VALIDATION_ERROR', details: invalid },
+          400,
+        )
+      }
       const result = await upsertShifts(tenantId, createdBy, shifts)
       logger.info(
         { tenantId, created: result.created.length, updated: result.updated.length },

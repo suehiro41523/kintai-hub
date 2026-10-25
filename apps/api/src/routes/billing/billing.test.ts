@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../db/index.js'
-import { billingSummaries } from '../../db/schema/app.js'
+import { billingContracts, billingSummaries } from '../../db/schema/app.js'
 import {
   apiRequest,
   createTestTenant,
@@ -73,5 +73,45 @@ describe('POST /billing/summaries/:id/confirm', () => {
 
     expect(res.status).toBe(200)
     expect(await findSummaryStatus(tenant.summaryId)).toBe('confirmed')
+  })
+})
+
+describe('精算契約のworkTypeId', () => {
+  let tenant: TestTenant
+  let otherTenant: TestTenant
+
+  beforeEach(async () => {
+    tenant = await createTestTenant()
+    otherTenant = await createTestTenant()
+  })
+
+  it('POST /billing/contracts に他テナントのworkTypeIdを指定すると404を返す', async () => {
+    const res = await apiRequest('/billing/contracts', {
+      token: tenant.users.admin.token,
+      method: 'POST',
+      body: {
+        workTypeId: otherTenant.workTypeId,
+        clientName: '不正な契約',
+        billingType: 'hourly',
+        contractStart: `${TEST_YEAR}-01-01`,
+      },
+    })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('PATCH /billing/contracts/:id に他テナントのworkTypeIdを指定すると404を返し、契約は変わらない', async () => {
+    const res = await apiRequest(`/billing/contracts/${tenant.contractId}`, {
+      token: tenant.users.admin.token,
+      method: 'PATCH',
+      body: { workTypeId: otherTenant.workTypeId },
+    })
+
+    expect(res.status).toBe(404)
+    const [contract] = await db
+      .select({ workTypeId: billingContracts.workTypeId })
+      .from(billingContracts)
+      .where(eq(billingContracts.id, tenant.contractId))
+    expect(contract.workTypeId).toBe(tenant.workTypeId)
   })
 })

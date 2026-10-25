@@ -6,6 +6,7 @@ import {
   insertTimeRecord,
   listTodayRecords,
 } from '../../db/queries/time-records.js'
+import { findWorkType } from '../../db/queries/work-types.js'
 import { logger } from '../../lib/logger.js'
 import { injectTenantContext, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
@@ -21,6 +22,11 @@ export const breakEndRoute = new Hono<AppEnv>().post(
     const { workTypeId } = c.req.valid('json')
     const userId = c.get('userId')
     const tenantId = c.get('tenantId')
+
+    if (!(await findWorkType(tenantId, workTypeId))) {
+      logger.warn({ tenantId, userId, workTypeId }, 'break_end: work type not found')
+      return c.json({ error: '指定されたワークタイプが存在しません', code: 'NOT_FOUND' }, 404)
+    }
 
     const todayRecords = await listTodayRecords(userId, tenantId)
     const activeSession = deriveActiveSession(todayRecords)

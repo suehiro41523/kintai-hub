@@ -2,6 +2,7 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { patchTimeRecord } from '../../db/queries/time-records.js'
+import { findWorkType } from '../../db/queries/work-types.js'
 import { logger } from '../../lib/logger.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
@@ -26,6 +27,10 @@ export const patchRoute = new Hono<AppEnv>().patch(
     const data = c.req.valid('json')
     const tenantId = c.get('tenantId')
     const modifiedBy = c.get('userId')
+
+    if (data.workTypeId !== undefined && !(await findWorkType(tenantId, data.workTypeId))) {
+      return c.json({ error: '指定されたワークタイプが存在しません', code: 'NOT_FOUND' }, 404)
+    }
 
     const record = await patchTimeRecord(
       tenantId,
