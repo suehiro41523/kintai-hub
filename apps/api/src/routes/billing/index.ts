@@ -11,6 +11,7 @@ import {
   listBillingSummaries,
   updateBillingContract,
 } from '../../db/queries/billing.js'
+import { findWorkType } from '../../db/queries/work-types.js'
 import { logger } from '../../lib/logger.js'
 import { injectTenantContext, requireRole, verifySession } from '../../middleware/auth.js'
 import type { AppEnv } from '../../types.js'
@@ -59,6 +60,9 @@ export const billingRouter = new Hono<AppEnv>()
     async (c) => {
       const data = c.req.valid('json')
       const tenantId = c.get('tenantId')
+      if (!(await findWorkType(tenantId, data.workTypeId))) {
+        return c.json({ error: '指定されたワークタイプが存在しません', code: 'NOT_FOUND' }, 404)
+      }
       const contract = await createBillingContract({ tenantId, ...data })
       logger.info({ tenantId, contractId: contract.id }, 'billing_contract_created')
       return c.json({ contract }, 201)
@@ -85,6 +89,9 @@ export const billingRouter = new Hono<AppEnv>()
       const id = c.req.param('id')
       const data = c.req.valid('json')
       const tenantId = c.get('tenantId')
+      if (data.workTypeId !== undefined && !(await findWorkType(tenantId, data.workTypeId))) {
+        return c.json({ error: '指定されたワークタイプが存在しません', code: 'NOT_FOUND' }, 404)
+      }
       const contract = await updateBillingContract(tenantId, id, data)
       if (!contract) {
         return c.json({ error: '契約が見つかりません', code: 'NOT_FOUND' }, 404)
